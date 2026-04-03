@@ -18,11 +18,11 @@ ALL_TOOLS = STANDARD_TOOLS + DATASET_TOOLS + CODELIST_TOOLS + SEARCH_TOOLS
 async def register_tools(server: Server, client: CDISCClient) -> None:
     """Register all MCP tools."""
 
-    @server.list_tools
+    @server.list_tools()
     async def list_tools() -> list[Tool]:
         return ALL_TOOLS
 
-    @server.call_tool
+    @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         result = await _execute_tool(client, name, arguments)
         return [TextContent(

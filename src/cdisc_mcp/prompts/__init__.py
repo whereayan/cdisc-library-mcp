@@ -9,7 +9,7 @@ from .templates import PROMPT_TEMPLATES
 async def register_prompts(server: Server) -> None:
     """Register all MCP prompts."""
 
-    @server.list_prompts
+    @server.list_prompts()
     async def list_prompts() -> list[Prompt]:
         return [
             Prompt(
@@ -66,7 +66,7 @@ async def register_prompts(server: Server) -> None:
             ),
         ]
 
-    @server.get_prompt
+    @server.get_prompt()
     async def get_prompt(name: str, arguments: dict) -> str:
         """Get prompt template content."""
         template = PROMPT_TEMPLATES.get(name)

@@ -10,7 +10,7 @@ from ..client import CDISCClient
 async def register_product_resources(server: Server, client: CDISCClient) -> None:
     """Register product-related resources."""
 
-    @server.list_resources
+    @server.list_resources()
     async def list_products_resources() -> list[Resource]:
         """List available product resources."""
         return [
@@ -28,7 +28,7 @@ async def register_product_resources(server: Server, client: CDISCClient) -> Non
             ),
         ]
 
-    @server.read_resource
+    @server.read_resource()
     async def read_product_resource(uri: str) -> TextContent:
         """Read product resource content."""
         if uri == "cdisc://products":

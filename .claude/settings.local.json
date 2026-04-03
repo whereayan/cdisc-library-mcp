@@ -7,7 +7,11 @@
       "Bash(python -m pytest tests/test_cache.py -v)",
       "Bash(python -m pytest tests/test_client.py -v)",
       "Bash(python -m pytest tests/ -v --ignore=tests/test_tools.py)",
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m pytest tests/ -v --tb=short --co -q)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }
