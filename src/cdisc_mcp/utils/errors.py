@@ -43,9 +43,9 @@ class AuthenticationError(CDISCError):
 
     def __init__(
         self,
-        message: str = "🔑 API Key 无效或已过期，请检查配置中的 CDISC_API_KEY",
+        message: str = "🔑 API Key 无效或需要会员权限，请检查 CDISC_API_KEY",
         status_code: int = 401,
-        hint: str = "可在 https://api.developer.library.cdisc.org/profile 获取 API Key"
+        hint: str = "可在 https://api.developer.library.cdisc.org/profile 获取 API Key，部分内容需要 CDISC 会员权限"
     ):
         super().__init__(message, {
             "status_code": status_code,

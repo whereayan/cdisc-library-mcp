@@ -81,14 +81,15 @@ class CDISCClient:
         """Get HTTP headers for API requests.
 
         Returns:
-            Dict with Content-Type and Authorization headers
+            Dict with Content-Type and api-key header
         """
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
         if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
+            # CDISC API uses api-key header, not Bearer token
+            headers["api-key"] = self.config.api_key
         return headers
 
     async def _request_with_retry(
