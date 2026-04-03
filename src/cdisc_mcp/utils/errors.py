@@ -165,7 +165,8 @@ def format_http_error(status_code: int, url: str, response_text: str = "") -> CD
     elif status_code == 404:
         return ResourceNotFoundError(
             message=f"📄 未找到资源: {url}",
-            details={"url": url, "response": response_text}
+            resource_type="url",
+            resource_id=url
         )
     elif status_code == 429:
         return RateLimitError()
