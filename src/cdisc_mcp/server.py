@@ -5,6 +5,7 @@ import sys
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.server.models import InitializationOptions
 
 from .config import CDISCConfig
 from .client import CDISCClient
@@ -25,7 +26,7 @@ class CDISCMCPServer:
         self.config = config
         self.cache = CacheManager(config.get_cache_path(), config.cache_ttl)
         self.client = CDISCClient(config, self.cache)
-        self.server = Server("cdisc-library-mcp")
+        self.server = Server("cdisc-library-mcp", version="0.1.0")
 
     async def setup(self) -> None:
         """Register MCP components."""
@@ -35,8 +36,9 @@ class CDISCMCPServer:
     async def run(self) -> None:
         """Start the MCP server."""
         await self.setup()
+        init_options = self.server.create_initialization_options()
         async with stdio_server() as (read_stream, write_stream):
-            await self.server.run(read_stream, write_stream)
+            await self.server.run(read_stream, write_stream, init_options)
 
 
 async def main() -> None:
