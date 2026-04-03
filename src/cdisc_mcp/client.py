@@ -42,7 +42,8 @@ class CDISCClient:
         """
         self.config = config
         self.cache = cache
-        self.base_url = config.base_url.rstrip("/")
+        # CDISC API uses /mdr/ prefix for most endpoints
+        self.base_url = config.base_url.rstrip("/") + "/mdr"
 
     def _normalize_version(self, version: str) -> str:
         """Convert version format from dot to dash.

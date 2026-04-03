@@ -31,7 +31,8 @@ class TestCDISCClient:
         client = CDISCClient(config, cache)
         assert client.config == config
         assert client.cache == cache
-        assert client.base_url == "https://library.cdisc.org/api"
+        # base_url includes /mdr prefix for CDISC API
+        assert client.base_url == "https://library.cdisc.org/api/mdr"
 
     def test_normalize_version_dot_to_dash(self, client):
         assert client._normalize_version("1.8") == "1-8"

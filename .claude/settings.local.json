@@ -11,7 +11,8 @@
       "Bash(python -m pytest tests/ -v --tb=short --co -q)",
       "Bash(python:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "WebFetch(domain:api.developer.library.cdisc.org)"
     ]
   }
 }
