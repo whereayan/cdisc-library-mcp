@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip install -e \".[dev]\")",
+      "Bash(python -m pytest tests/test_config.py -v)",
+      "Bash(python -m pytest tests/test_errors.py -v)",
+      "Bash(python -m pytest tests/test_cache.py -v)",
+      "Bash(python -m pytest tests/test_client.py -v)",
+      "Bash(python -m pytest tests/ -v --ignore=tests/test_tools.py)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
+    ]
+  }
+}

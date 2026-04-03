@@ -3,14 +3,13 @@
 __version__ = "0.1.0"
 __author__ = "CDISC MCP Contributors"
 
-# TODO: Uncomment imports after modules are created
-# from .config import CDISCConfig
-# from .client import CDISCClient
-# from .cache import CacheManager
+from .config import CDISCConfig
+from .client import CDISCClient
+from .cache import CacheManager
 
 __all__ = [
     "__version__",
-    # "CDISCConfig",
-    # "CDISCClient",
-    # "CacheManager",
+    "CDISCConfig",
+    "CDISCClient",
+    "CacheManager",
 ]
