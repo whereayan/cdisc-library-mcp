@@ -15,10 +15,14 @@
 
 ### 1.2 范围
 
-- 支持全部 163 个 CDISC Library API 操作
+- 提供约 25 个核心 MCP Tools，通过统一接口覆盖 163 个 CDISC Library API 操作
 - 提供友好的中文错误提示
 - 支持持久化缓存加速访问
 - 遵循 MCP 最佳实践（Resources + Tools + Prompts）
+
+**设计策略**：由于 163 个 API 操作数量过多，采用"统一入口"模式，将相似操作归类到同一工具中，通过参数区分具体操作。例如：
+- `get_dataset` 工具通过 `standard` 参数支持 SDTM/SDTMIG/ADaM/SENDIG 等多个标准
+- `get_codelist` 工具通过 `package` 参数支持所有 CT 包
 
 ### 1.3 目标用户
 
@@ -45,10 +49,14 @@
 ### 2.2 依赖项
 
 ```
-mcp>=1.0.0
-httpx>=0.25.0
-pydantic>=2.0.0
+mcp>=0.9.0           # MCP Python SDK (参考 PyPI 实际版本)
+httpx>=0.25.0        # 异步 HTTP 客户端
+pydantic>=2.0.0      # 数据验证
+pytest>=7.0.0        # 测试框架
+pytest-asyncio>=0.21.0  # 异步测试支持
 ```
+
+> **注意**: MCP SDK 版本号以 PyPI 发布为准，详见 https://pypi.org/project/mcp/
 
 ---
 
@@ -143,6 +151,9 @@ class CDISCConfig(BaseModel):
     cache_dir: str = "~/.cdisc-mcp/cache"
     cache_ttl: int = 86400          # 默认缓存 24 小时
     request_timeout: int = 30       # 请求超时秒数
+    max_retries: int = 3            # 最大重试次数
+    retry_delay: float = 1.0        # 重试初始延迟（秒）
+    retry_backoff: float = 2.0      # 重试退避因子
     
     @classmethod
     def from_env(cls) -> "CDISCConfig":
@@ -305,6 +316,51 @@ CDISCError (基类)
 }
 ```
 
+### 4.5 MCP Server 入口 (server.py)
+
+```python
+# server.py
+import asyncio
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+from .config import CDISCConfig
+from .client import CDISCClient
+from .cache import CacheManager
+from .resources import register_resources
+from .tools import register_tools
+from .prompts import register_prompts
+
+class CDISCMCPServer:
+    """CDISC Library MCP Server"""
+    
+    def __init__(self, config: CDISCConfig):
+        self.config = config
+        self.cache = CacheManager(config.cache_dir, config.cache_ttl)
+        self.client = CDISCClient(config, self.cache)
+        self.server = Server("cdisc-library-mcp")
+        
+    async def setup(self):
+        """注册 MCP 组件"""
+        await register_resources(self.server, self.client)
+        await register_tools(self.server, self.client)
+        await register_prompts(self.server)
+    
+    async def run(self):
+        """启动服务器"""
+        await self.setup()
+        async with stdio_server() as (read_stream, write_stream):
+            await self.server.run(read_stream, write_stream)
+
+async def main():
+    config = CDISCConfig.from_env()
+    server = CDISCMCPServer(config)
+    await server.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ---
 
 ## 5. MCP 接口设计
@@ -460,7 +516,14 @@ result = await compare_versions(
 
 ## 6. 配置说明
 
-### 6.1 MCP 配置
+### 6.1 获取 API Key
+
+1. 访问 [CDISC Library API Portal](https://api.developer.library.cdisc.org/)
+2. 点击 "Sign in" 使用 CDISC 账号登录（或注册新账号）
+3. 登录后访问 [Profile 页面](https://api.developer.library.cdisc.org/profile)
+4. 在页面中找到或生成 API Key
+
+### 6.2 MCP 配置
 
 ```json
 {
@@ -485,6 +548,33 @@ result = await compare_versions(
 | `CDISC_BASE_URL` | ❌ | `https://library.cdisc.org/api` | API 基础 URL |
 | `CDISC_CACHE_DIR` | ❌ | `~/.cdisc-mcp/cache` | 缓存目录 |
 | `CDISC_CACHE_TTL` | ❌ | `86400` | 默认缓存时间（秒） |
+
+### 6.4 版本号格式说明
+
+CDISC Library API 中的版本号使用 `-` 分隔，而非 `.`：
+
+| 标准 | 正确格式 | 错误格式 |
+|------|----------|----------|
+| SDTM | `1-8`, `2-0` | `1.8`, `2.0` |
+| SDTMIG | `3-4`, `3-3` | `3.4`, `3.3` |
+| ADaM | `adamig-1-3` | `adamig-1.3` |
+| CT Package | `p60`, `P60` | - (大小写不敏感) |
+
+**工具调用时自动转换**：如果用户传入 `.` 格式，工具会自动转换为 `-` 格式。
+
+### 6.5 速率限制
+
+CDISC Library API 的速率限制规则：
+
+| 限制类型 | 数值 | 说明 |
+|----------|------|------|
+| 每分钟请求数 | 约 60 次 | 具体以 API 返回的 `X-RateLimit-*` 头为准 |
+| 每日请求数 | 无明确限制 | 建议合理使用 |
+
+当触发速率限制时（HTTP 429），客户端会：
+1. 读取 `Retry-After` 响应头
+2. 等待指定时间后自动重试
+3. 超过重试次数后抛出 `RateLimitError`
 
 ---
 
@@ -559,3 +649,4 @@ result = await compare_versions(
 | 版本 | 日期 | 作者 | 变更内容 |
 |------|------|------|----------|
 | 1.0.0 | 2026-04-03 | Claude (Anya) | 初始版本 |
+| 1.0.1 | 2026-04-03 | Claude (Anya) | 根据审查意见修复：澄清 Tools 覆盖策略、更新 MCP SDK 版本、添加重试机制、添加 server.py 示例、添加版本号格式说明、添加 API Key 获取指南 |
