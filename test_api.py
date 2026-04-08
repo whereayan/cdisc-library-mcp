@@ -3,8 +3,14 @@
 import asyncio
 import os
 
-# Set environment variable
-os.environ["CDISC_API_KEY"] = "31b1e1cb275e4205b13467f9d254429b"
+# Get API key from environment variable
+api_key = os.environ.get("CDISC_API_KEY")
+if not api_key:
+    raise ValueError(
+        "请设置环境变量 CDISC_API_KEY\n"
+        "Windows: set CDISC_API_KEY=your-api-key\n"
+        "Linux/Mac: export CDISC_API_KEY=your-api-key"
+    )
 
 from cdisc_mcp.config import CDISCConfig
 from cdisc_mcp.client import CDISCClient

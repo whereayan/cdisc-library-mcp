@@ -40,3 +40,4 @@ htmlcov/
 
 # Project specific
 .claude/
+.mcp.json
