@@ -40,6 +40,43 @@ class TestCDISCClient:
         assert client._normalize_version("1-8") == "1-8"
         assert client._normalize_version("adamig-1.3") == "adamig-1-3"
 
+    def test_build_standard_url_sdtmig(self, client):
+        """Test URL building for SDTMIG - should NOT have sdtmig- prefix."""
+        # SDTMIG: /mdr/sdtmig/{version}
+        url = client._build_standard_url("sdtmig", "3-4")
+        assert url == "https://library.cdisc.org/api/mdr/sdtmig/3-4"
+
+        url = client._build_standard_url("sdtmig", "3.4", "datasets", "LB")
+        assert url == "https://library.cdisc.org/api/mdr/sdtmig/3-4/datasets/LB"
+
+    def test_build_standard_url_sendig(self, client):
+        """Test URL building for SENDIG - should NOT have sendig- prefix."""
+        url = client._build_standard_url("sendig", "3-1")
+        assert url == "https://library.cdisc.org/api/mdr/sendig/3-1"
+
+    def test_build_standard_url_cdashig(self, client):
+        """Test URL building for CDASHIG - should NOT have cdashig- prefix."""
+        url = client._build_standard_url("cdashig", "2-3")
+        assert url == "https://library.cdisc.org/api/mdr/cdashig/2-3"
+
+    def test_build_standard_url_adamig(self, client):
+        """Test URL building for ADaMIG - should have adamig- prefix under /adam/."""
+        # ADaMIG: /mdr/adam/adamig-{version}
+        url = client._build_standard_url("adamig", "1-3")
+        assert url == "https://library.cdisc.org/api/mdr/adam/adamig-1-3"
+
+    def test_build_standard_url_adam(self, client):
+        """Test URL building for ADaM base model - just version under /adam/."""
+        # ADaM base: /mdr/adam/{version}
+        url = client._build_standard_url("adam", "2-1")
+        assert url == "https://library.cdisc.org/api/mdr/adam/2-1"
+
+    def test_build_standard_url_sdtm(self, client):
+        """Test URL building for SDTM base model."""
+        # SDTM base: /mdr/sdtm/{version}
+        url = client._build_standard_url("sdtm", "2-0")
+        assert url == "https://library.cdisc.org/api/mdr/sdtm/2-0"
+
     @pytest.mark.asyncio
     async def test_get_products_cached(self, client, cache):
         cached_data = {"products": [{"name": "SDTM", "href": "sdtm"}]}

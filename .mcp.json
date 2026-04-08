@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cdisc-library": {
+      "command": "python",
+      "args": ["-m", "cdisc_mcp.server"],
+      "env": {
+        "CDISC_API_KEY": "31b1e1cb275e4205b13467f9d254429b"
+      }
+    }
+  }
+}

@@ -16,15 +16,6 @@ SEARCH_TOOLS = [
         },
     ),
     Tool(
-        name="search_suggest",
-        description="获取搜索建议",
-        inputSchema={
-            "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
-        },
-    ),
-    Tool(
         name="compare_versions",
         description="版本差异比较",
         inputSchema={

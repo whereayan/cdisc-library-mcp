@@ -77,6 +77,42 @@ class CDISCClient:
         """
         return package.lower()
 
+    def _build_standard_url(self, standard: str, version: str, *extra_parts: str) -> str:
+        """Build URL for a standard, handling IG series special format.
+
+        IG (Implementation Guide) series standards have different URL formats:
+        - ADaM base model: /mdr/adam/{version} (e.g., /mdr/adam/2-1)
+        - ADaMIG: /mdr/adam/adamig-{version} (e.g., /mdr/adam/adamig-1-3)
+        - SDTM base model: /mdr/sdtm/{version} (e.g., /mdr/sdtm/2-0)
+        - SDTMIG: /mdr/sdtmig/{version} (e.g., /mdr/sdtmig/3-4) - NO prefix
+        - SENDIG: /mdr/sendig/{version} (e.g., /mdr/sendig/3-1) - NO prefix
+        - CDASHIG: /mdr/cdashig/{version} (e.g., /mdr/cdashig/2-3) - NO prefix
+
+        Args:
+            standard: Standard name (e.g., "adam", "adamig", "sdtm", "sdtmig")
+            version: Version string (e.g., "2-1", "1-3", "3-4")
+            *extra_parts: Additional path parts (e.g., "classes", "datasets")
+
+        Returns:
+            Full URL for the standard
+        """
+        version = self._normalize_version(version)
+
+        # ADaMIG is special: it's under /mdr/adam/ with prefix "adamig-{version}"
+        if standard == "adamig":
+            url = self._build_url("adam", f"adamig-{version}", *extra_parts)
+        # ADaM base model: /mdr/adam/{version}
+        elif standard == "adam":
+            url = self._build_url("adam", version, *extra_parts)
+        # SDTMIG/SENDIG/CDASHIG: NO prefix, just /mdr/{standard}/{version}
+        elif standard in ("sdtmig", "sendig", "cdashig"):
+            url = self._build_url(standard, version, *extra_parts)
+        else:
+            # Base standards (sdtm, cdash): /mdr/{standard}/{version}
+            url = self._build_url(standard, version, *extra_parts)
+
+        return url
+
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers for API requests.
 
@@ -200,25 +236,6 @@ class CDISCClient:
         self.cache.set(cache_key, result)
         return result
 
-    async def get_products_by_group(self, group: str) -> dict[str, Any]:
-        """Get products by group.
-
-        Args:
-            group: Product group name (e.g., "cdash", "sdtm", "adam")
-
-        Returns:
-            Dict with filtered products list
-        """
-        cache_key = f"products/group/{group}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-
-        url = self._build_url("products", group)
-        result = await self._request_with_retry("GET", url)
-        self.cache.set(cache_key, result)
-        return result
-
     async def get_about(self) -> dict[str, Any]:
         """Get API information.
 
@@ -252,7 +269,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url("standards", standard, version)
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version)
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -277,7 +295,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url("standards", standard, version, "classes")
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version, "classes")
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -306,7 +325,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url("standards", standard, version, "datasets")
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version, "datasets")
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -333,7 +353,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url("standards", standard, version, "datasets", dataset)
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version, "datasets", dataset)
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -360,9 +381,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url(
-            "standards", standard, version, "datasets", dataset, "variables"
-        )
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version, "datasets", dataset, "variables")
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -391,9 +411,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url(
-            "standards", standard, version, "datasets", dataset, "variables", variable
-        )
+        # Build URL using helper method that handles ADaM series special format
+        url = self._build_standard_url(standard, version, "datasets", dataset, "variables", variable)
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
@@ -560,23 +579,6 @@ class CDISCClient:
         )
         return result
 
-    async def search_suggest(self, query: str) -> dict[str, Any]:
-        """Get search suggestions.
-
-        Args:
-            query: Partial search query
-
-        Returns:
-            Dict with suggestions
-        """
-        url = self._build_url("search", "suggest")
-        result = await self._request_with_retry(
-            "GET",
-            url,
-            params={"q": query}
-        )
-        return result
-
     # ====================
     # Comparison Endpoints
     # ====================
@@ -604,11 +606,8 @@ class CDISCClient:
         if cached:
             return cached
 
-        url = self._build_url("standards", standard, "compare")
-        result = await self._request_with_retry(
-            "GET",
-            url,
-            params={"from": version1, "to": version2}
-        )
+        # URL format: /mdr/diff/{product}/{version}/{previous}
+        url = self._build_url("diff", standard, version2, version1)
+        result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result

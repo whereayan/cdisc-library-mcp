@@ -7,7 +7,7 @@ MCP Server for CDISC Library API - 提供对临床数据标准的完整访问。
 
 ## 功能特性
 
-- 🔧 **约 20 个 MCP Tools** - 覆盖 SDTM, ADaM, CDASH, CT 等标准
+- 🔧 **15 个 MCP Tools** - 覆盖 SDTM, ADaM, CDASH, CT 等标准
 - 📦 **MCP Resources** - 产品列表、API 信息
 - 💬 **MCP Prompts** - 引导式标准探索
 - 🗄️ **持久化缓存** - 减少 API 调用，加速访问
@@ -51,6 +51,7 @@ pip install cdisc-library-mcp
 | 工具 | 描述 |
 |------|------|
 | `get_products` | 获取所有 CDISC 产品列表 |
+| `get_products_by_group` | 按分组获取产品列表（如 sdtm, adam, cdash） |
 | `get_standard` | 获取标准产品信息 |
 | `get_classes` | 获取标准的类列表 |
 
@@ -70,12 +71,12 @@ pip install cdisc-library-mcp
 | `get_codelists` | 获取编码列表 |
 | `get_codelist` | 获取编码详情 |
 | `get_codelist_terms` | 获取术语列表 |
+| `get_term` | 获取术语详情 |
 
 ### 搜索与比较
 | 工具 | 描述 |
 |------|------|
 | `search` | 全局搜索 CDISC Library |
-| `search_suggest` | 获取搜索建议 |
 | `compare_versions` | 版本差异比较 |
 
 ## 版本号格式

@@ -70,12 +70,12 @@ async def _execute_tool(client: CDISCClient, name: str, args: dict) -> dict:
         return await client.get_codelist(args["package"], args["codelist"])
     elif name == "get_codelist_terms":
         return await client.get_codelist_terms(args["package"], args["codelist"])
+    elif name == "get_term":
+        return await client.get_term(args["package"], args["codelist"], args["term"])
 
     # Search tools
     elif name == "search":
         return await client.search(args["query"])
-    elif name == "search_suggest":
-        return await client.search_suggest(args["query"])
     elif name == "compare_versions":
         return await client.compare_versions(
             args["standard"], args["version1"], args["version2"]

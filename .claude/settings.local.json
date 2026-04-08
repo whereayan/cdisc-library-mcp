@@ -12,7 +12,16 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "WebFetch(domain:api.developer.library.cdisc.org)"
+      "WebFetch(domain:api.developer.library.cdisc.org)",
+      "mcp__cdisc-library__get_products",
+      "mcp__cdisc-library__compare_versions",
+      "mcp__cdisc-library__get_standard",
+      "mcp__cdisc-library__search_suggest",
+      "WebFetch(domain:www.cdisc.org)",
+      "WebSearch",
+      "mcp__cdisc-library__get_dataset_variables",
+      "mcp__cdisc-library__search",
+      "mcp__cdisc-library__get_dataset"
     ]
   }
 }

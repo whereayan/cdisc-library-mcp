@@ -51,4 +51,17 @@ CODELIST_TOOLS = [
             "required": ["package", "codelist"],
         },
     ),
+    Tool(
+        name="get_term",
+        description="获取术语详情",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "package": {"type": "string"},
+                "codelist": {"type": "string"},
+                "term": {"type": "string", "description": "术语ID"},
+            },
+            "required": ["package", "codelist", "term"],
+        },
+    ),
 ]
