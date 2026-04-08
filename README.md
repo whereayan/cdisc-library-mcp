@@ -1,5 +1,6 @@
 # CDISC Library MCP Server
 
+[![PyPI version](https://img.shields.io/pypi/v/cdisc-library-mcp.svg)](https://pypi.org/project/cdisc-library-mcp/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -15,44 +16,16 @@ MCP Server for CDISC Library API - 提供对临床数据标准的完整访问。
 
 ## 安装
 
-```bash
-pip install cdisc-library-mcp
-```
+### 方式一：uvx（推荐，自动安装）
 
-## 配置
-
-### 1. 获取 API Key
-
-1. 访问 [CDISC Library API Portal](https://api.developer.library.cdisc.org/)
-2. 登录或注册 CDISC 账号
-3. 在 [Profile 页面](https://api.developer.library.cdisc.org/profile) 获取 API Key
-
-### 2. 配置方式
-
-**方式一：使用 .env 文件（推荐）**
-
-在项目根目录创建 `.env` 文件：
-
-```bash
-# 复制模板
-cp .env.example .env
-
-# 编辑文件，填入你的 API Key
-CDISC_API_KEY=your-api-key-here
-```
-
-Server 启动时会自动加载 `.env` 文件。
-
-**方式二：MCP 客户端配置**
-
-在 Claude Desktop 配置文件中添加：
+无需手动安装，MCP 客户端会自动下载：
 
 ```json
 {
   "mcpServers": {
     "cdisc-library": {
-      "command": "python",
-      "args": ["-m", "cdisc_mcp.server"],
+      "command": "uvx",
+      "args": ["cdisc-library-mcp"],
       "env": {
         "CDISC_API_KEY": "your-api-key-here"
       }
@@ -61,9 +34,41 @@ Server 启动时会自动加载 `.env` 文件。
 }
 ```
 
-**配置文件位置：**
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+### 方式二：pip 安装
+
+```bash
+pip install cdisc-library-mcp
+```
+
+然后在 MCP 客户端配置：
+
+```json
+{
+  "mcpServers": {
+    "cdisc-library": {
+      "command": "cdisc-library-mcp",
+      "env": {
+        "CDISC_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+## 获取 API Key
+
+1. 访问 [CDISC Library API Portal](https://api.developer.library.cdisc.org/)
+2. 登录或注册 CDISC 账号
+3. 在 [Profile 页面](https://api.developer.library.cdisc.org/profile) 获取 API Key
+
+## MCP 客户端配置文件位置
+
+| 客户端 | 配置文件路径 |
+|--------|--------------|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| TRAE | 项目根目录 `.mcp.json` |
 
 ## 可用工具
 
@@ -71,7 +76,6 @@ Server 启动时会自动加载 `.env` 文件。
 | 工具 | 描述 |
 |------|------|
 | `get_products` | 获取所有 CDISC 产品列表 |
-| `get_products_by_group` | 按分组获取产品列表（如 sdtm, adam, cdash） |
 | `get_standard` | 获取标准产品信息 |
 | `get_classes` | 获取标准的类列表 |
 
@@ -134,6 +138,17 @@ python -m pytest tests/ -v
 
 # 运行测试覆盖率
 python -m pytest tests/ --cov=src/cdisc_mcp
+```
+
+## 发布
+
+```bash
+# 使用发布脚本
+python scripts/release.py 0.1.3
+
+# 或手动发布
+python -m build
+twine upload dist/*
 ```
 
 ## 许可证

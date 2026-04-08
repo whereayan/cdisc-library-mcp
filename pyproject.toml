@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cdisc-library-mcp"
-version = "0.1.1"
+version = "0.1.4"
 description = "MCP Server for CDISC Library API - Clinical Data Standards Access"
 readme = "README.md"
 license = "MIT"
@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-cdisc-mcp = "cdisc_mcp.server:main"
+cdisc-library-mcp = "cdisc_mcp.server:main"
 
 [project.urls]
 Homepage = "https://github.com/whereayan/cdisc-library-mcp"

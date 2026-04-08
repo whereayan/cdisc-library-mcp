@@ -34,7 +34,18 @@
       "Bash(pip install:*)",
       "Bash(rm:*)",
       "Bash(twine check:*)",
-      "Bash(TWINE_USERNAME=__token__ TWINE_PASSWORD=\"pypi-AgEIcHlwaS5vcmcCJDBkM2NjNzgwLTBjMTctNGU2Ni04NzBjLTg3MmU3NDkwZWI2OAACKlszLCIxMmY0NTU0ZS1jMmM5LTQ5MGItYmNmOS04OGFjNjZhNmEyODYiXQAABiBQIkVgV9GZo7qD56v5p65CYghRABdSPd6iTbuX6edT5w\" twine upload dist/*)"
+      "Bash(TWINE_USERNAME=__token__ TWINE_PASSWORD=\"pypi-AgEIcHlwaS5vcmcCJDBkM2NjNzgwLTBjMTctNGU2Ni04NzBjLTg3MmU3NDkwZWI2OAACKlszLCIxMmY0NTU0ZS1jMmM5LTQ5MGItYmNmOS04OGFjNjZhNmEyODYiXQAABiBQIkVgV9GZo7qD56v5p65CYghRABdSPd6iTbuX6edT5w\" twine upload dist/*)",
+      "Bash(where uvx:*)",
+      "Bash(where uv:*)",
+      "Bash(powershell:*)",
+      "Bash(export PATH=\"C:/Users/zhongqian.xu/.local/bin:$PATH\")",
+      "Bash(uv --version)",
+      "Bash(uvx --version)",
+      "Bash(\"C:/Users/zhongqian.xu/.local/bin/uv.exe\" --version)",
+      "Bash(\"C:/Users/zhongqian.xu/.local/bin/uvx.exe\" --version)",
+      "Bash(\"C:/Users/zhongqian.xu/.local/bin/uvx.exe\" cdisc-library-mcp:*)",
+      "Bash(C:/Users/zhongqian.xu/.local/bin/uvx.exe:*)",
+      "Bash(TWINE_USERNAME=__token__ TWINE_PASSWORD=\"pypi-AgEIcHlwaS5vcmcCJDE0YTI4YjRiLTk0NWQtNGZiOS05NTcyLTEzYWNhMmEwOWM4NQACGVsxLFsiY2Rpc2MtbGlicmFyeS1tY3AiXV0AAixbMixbIjIwZmNjZjljLTUxM2YtNDk2OS04NWZjLThmYmM5YmVjYTQ1NyJdXQAABiDAoCkQ0jZdc8Spg3ZVlP1vgeWhXzfwyLGHHE85JfKsiA\" twine upload dist/*)"
     ]
   }
 }
