@@ -27,9 +27,25 @@ pip install cdisc-library-mcp
 2. 登录或注册 CDISC 账号
 3. 在 [Profile 页面](https://api.developer.library.cdisc.org/profile) 获取 API Key
 
-### 2. MCP 配置
+### 2. 配置方式
 
-在 Claude Desktop 或其他 MCP 客户端中添加配置：
+**方式一：使用 .env 文件（推荐）**
+
+在项目根目录创建 `.env` 文件：
+
+```bash
+# 复制模板
+cp .env.example .env
+
+# 编辑文件，填入你的 API Key
+CDISC_API_KEY=your-api-key-here
+```
+
+Server 启动时会自动加载 `.env` 文件。
+
+**方式二：MCP 客户端配置**
+
+在 Claude Desktop 配置文件中添加：
 
 ```json
 {
@@ -44,6 +60,10 @@ pip install cdisc-library-mcp
   }
 }
 ```
+
+**配置文件位置：**
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ## 可用工具
 
@@ -103,7 +123,7 @@ CDISC Library API 使用 `-` 分隔版本号：
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/cdisc-library-mcp.git
+git clone https://github.com/whereayan/cdisc-library-mcp.git
 cd cdisc-library-mcp
 
 # 安装开发依赖

@@ -1,8 +1,11 @@
 """CDISC Library MCP Server Entry Point."""
 
 import asyncio
+import os
 import sys
+from pathlib import Path
 
+from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.server.models import InitializationOptions
@@ -12,6 +15,27 @@ from .client import CDISCClient
 from .cache import CacheManager
 from .resources import register_resources
 from .tools import register_tools
+
+
+def _load_env_file() -> None:
+    """Load environment variables from .env file.
+
+    Searches for .env file in:
+    1. Current working directory
+    2. Package installation directory
+    3. User home directory (~/.cdisc-mcp/.env)
+    """
+    # 优先级：工作目录 > 包目录 > 用户目录
+    env_paths = [
+        Path.cwd() / ".env",
+        Path(__file__).parent.parent.parent / ".env",  # 项目根目录
+        Path.home() / ".cdisc-mcp" / ".env",
+    ]
+
+    for env_path in env_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            break
 
 
 class CDISCMCPServer:
@@ -26,7 +50,7 @@ class CDISCMCPServer:
         self.config = config
         self.cache = CacheManager(config.get_cache_path(), config.cache_ttl)
         self.client = CDISCClient(config, self.cache)
-        self.server = Server("cdisc-library-mcp", version="0.1.0")
+        self.server = Server("cdisc-library-mcp", version="0.1.1")
 
     async def setup(self) -> None:
         """Register MCP components."""
@@ -41,8 +65,11 @@ class CDISCMCPServer:
             await self.server.run(read_stream, write_stream, init_options)
 
 
-async def main() -> None:
-    """Main entry point."""
+async def async_main() -> None:
+    """Main async entry point."""
+    # 加载 .env 文件（如果存在）
+    _load_env_file()
+
     config = CDISCConfig.from_env()
 
     if not config.api_key:
@@ -57,5 +84,10 @@ async def main() -> None:
     await server.run()
 
 
+def main() -> None:
+    """Synchronous entry point for uvx/pip."""
+    asyncio.run(async_main())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

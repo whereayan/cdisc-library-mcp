@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cdisc-library-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP Server for CDISC Library API - Clinical Data Standards Access"
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,7 @@ dependencies = [
     "mcp>=0.9.0",
     "httpx>=0.25.0",
     "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -41,9 +42,9 @@ dev = [
 cdisc-mcp = "cdisc_mcp.server:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/cdisc-library-mcp"
-Documentation = "https://github.com/your-org/cdisc-library-mcp#readme"
-Repository = "https://github.com/your-org/cdisc-library-mcp"
+Homepage = "https://github.com/whereayan/cdisc-library-mcp"
+Documentation = "https://github.com/whereayan/cdisc-library-mcp#readme"
+Repository = "https://github.com/whereayan/cdisc-library-mcp"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cdisc_mcp"]

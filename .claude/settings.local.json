@@ -21,7 +21,20 @@
       "WebSearch",
       "mcp__cdisc-library__get_dataset_variables",
       "mcp__cdisc-library__search",
-      "mcp__cdisc-library__get_dataset"
+      "mcp__cdisc-library__get_dataset",
+      "mcp__cdisc-library__get_ct_packages",
+      "mcp__cdisc-library__get_classes",
+      "mcp__cdisc-library__get_datasets",
+      "mcp__cdisc-library__get_ct_package",
+      "mcp__cdisc-library__get_variable",
+      "mcp__cdisc-library__get_codelists",
+      "mcp__cdisc-library__get_codelist",
+      "mcp__cdisc-library__get_codelist_terms",
+      "mcp__cdisc-library__get_term",
+      "Bash(pip install:*)",
+      "Bash(rm:*)",
+      "Bash(twine check:*)",
+      "Bash(TWINE_USERNAME=__token__ TWINE_PASSWORD=\"pypi-AgEIcHlwaS5vcmcCJDBkM2NjNzgwLTBjMTctNGU2Ni04NzBjLTg3MmU3NDkwZWI2OAACKlszLCIxMmY0NTU0ZS1jMmM5LTQ5MGItYmNmOS04OGFjNjZhNmEyODYiXQAABiBQIkVgV9GZo7qD56v5p65CYghRABdSPd6iTbuX6edT5w\" twine upload dist/*)"
     ]
   }
 }
