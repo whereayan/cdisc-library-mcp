@@ -99,6 +99,33 @@ def gate_secret_scan(label: str, extra: list[str]) -> None:
     except subprocess.CalledProcessError:
         sys.exit(f"✘ {label}：发现疑似密钥，发布中止（详见上方输出）")
 
+
+def check_pypirc_credentials(repo: str) -> None:
+    """Fail early with a readable message instead of twine's cryptic 403.
+
+    twine falls back to ~/.pypirc; an unfilled template there otherwise surfaces
+    as "Invalid or non-existent authentication information".
+    """
+    import configparser
+
+    pypirc = Path.home() / ".pypirc"
+    if not pypirc.exists():
+        sys.exit(
+            f"✘ 没有 PyPI 凭据：未设 TWINE_PASSWORD/PYPI_TOKEN，且 {pypirc} 不存在。"
+            " 在该文件 [pypi] 段填 username = __token__ / password = pypi-<token>，"
+            "token 在 https://pypi.org/manage/account/token/ 生成"
+        )
+    cp = configparser.ConfigParser()
+    cp.read(pypirc, encoding="utf-8")
+    section = "testpypi" if repo == "testpypi" else "pypi"
+    password = cp.get(section, "password", fallback="").strip()
+    if not password or password.startswith("pypi-<") or "粘贴" in password or "<token>" in password:
+        sys.exit(
+            f"✘ {pypirc} 的 [{section}] password 还是空的/模板占位符，请先填入真实 token"
+        )
+    print(f"ℹ 凭据取自 {pypirc}:[{section}]（password 长度 {len(password)}，未打印内容）")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("version", nargs="?", help="目标版本号 X.Y.Z；省略则用当前 version.py 的值")
@@ -175,6 +202,8 @@ def main() -> None:
         return
 
     token = os.environ.get("TWINE_PASSWORD") or os.environ.get("PYPI_TOKEN")
+    if not token:
+        check_pypirc_credentials(args.repo)
     env = dict(os.environ)
     if token:
         # Token from the environment only. Never accept it as a command-line
