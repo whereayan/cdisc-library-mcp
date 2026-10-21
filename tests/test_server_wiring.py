@@ -96,3 +96,53 @@ class TestVersionConsistency:
         mcp_req = [r for r in requires if r.lower().startswith("mcp")]
         assert mcp_req, mcp_req
         assert "<2.0.0" in mcp_req[0].replace(" ", ""), mcp_req[0]
+
+
+class TestToolSchemas:
+    """0.1.6: schemas must constrain and document what the client accepts."""
+
+    async def _tools(self, server):
+        await server.setup()
+        res = await _request(server, types.ListToolsRequest(method="tools/list"))
+        return res.tools
+
+    async def test_all_tools_are_annotated_read_only(self, server):
+        for t in await self._tools(server):
+            assert t.annotations is not None, t.name
+            assert t.annotations.readOnlyHint is True, t.name
+
+    async def test_standard_param_is_enum_constrained(self, server):
+        from cdisc_mcp.tools._common import STANDARDS
+
+        seen = 0
+        for t in await self._tools(server):
+            props = t.inputSchema.get("properties", {})
+            if "standard" in props:
+                assert props["standard"].get("enum") == STANDARDS, t.name
+                seen += 1
+        # standard appears on: get_standard, get_classes, get_datasets,
+        # get_dataset, get_dataset_variables, get_variable, compare_versions
+        assert seen == 7, seen
+
+    async def test_every_tool_exposes_raw_escape_hatch(self, server):
+        for t in await self._tools(server):
+            props = t.inputSchema.get("properties", {})
+            assert "raw" in props, t.name
+            assert props["raw"]["type"] == "boolean", t.name
+
+    async def test_compare_versions_uses_directional_param_names(self, server):
+        tools = {t.name: t for t in await self._tools(server)}
+        schema = tools["compare_versions"].inputSchema
+        assert schema["required"] == ["standard", "old_version", "new_version"]
+        assert "version1" not in schema["properties"]
+        assert "section" in schema["properties"]
+        assert "max_rows" in schema["properties"]
+
+    async def test_search_declares_filter_and_paging_params(self, server):
+        tools = {t.name: t for t in await self._tools(server)}
+        props = tools["search"].inputSchema["properties"]
+        assert props["query"]["type"] == "string"
+        assert props["type"]["type"] == "string"
+        assert props["limit"]["type"] == "integer"
+        assert props["offset"]["type"] == "integer"
+        assert tools["search"].inputSchema["required"] == ["query"]

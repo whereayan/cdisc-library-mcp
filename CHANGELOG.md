@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.1.6
+
+针对工具设计问题的集中修复：目标是让 LLM 调用方少试错、省 token、不撞客户端超时。
+含三处**破坏性变更**（参数改名 / 默认响应形态），见 Changed。
+
+### Fixed
+
+- **ADaM 基础模型 URL 404**：旧版拼 `/mdr/adam/2-1`，真实 API 只认
+  `/mdr/adam/adam-2-1`（实测验证）。`standard='adam'` 此前实际不可用。
+  URL 构造统一为 `_product_path()`（group + tail 同构规则，diff 路径复用同一规则）。
+- **compare_versions 对 adamig 拼错 URL**：旧版拼 `/mdr/diff/adamig/1-3/1-2`（实测 404），
+  正确形态是 `/mdr/diff/adam/adamig-1-3/adamig-1-2`（实测 200）。
+- **compare_versions 超时**：完整 diff 可达 29 MB（SDTMIG 3-3→3-4 实测），旧版
+  30s×4 次的重试梯子最坏情况撞穿 MCP 客户端 60s 上限。现在单次 45s 超时、不重试。
+- **prompt 与工具签名漂移**：模板里宣传过不存在的 `search(query, scope?)` 和
+  `compare_versions(product, version, previous?)`，已全部改为真实签名。
+- **工具描述里的 LBTESTCD 示例 C 码是错的**：`get_codelist` / `get_codelist_terms` /
+  `get_term` 的 `codelist` 参数描述写的是 `C141657(LBTESTCD)`，而 C141657 实际是
+  *10-Meter Walk/Run Functional Test Test Code*，LBTESTCD 应为 **C65047**（经 SDTM CT
+  sdtmct-2026-09-25 实测）。调用方照描述取值会直接拿到一个无关 codelist，已改正并
+  在描述里补了「不确定某变量的 codelist ID 时先用 `get_variable` 看 refs」的引导。
+
+### Changed（破坏性）
+
+- **响应默认瘦身**：所有工具剥除 `_links`/`links`/`@search.*` 噪声，链接块折叠为
+  `refs`（标签→href）；每个工具新增 `raw`（boolean，默认 false）取原始载荷。
+- **compare_versions 参数改名**：`version1/version2` → `old_version/new_version`；
+  传反自动交换并在响应 note 说明；默认返回摘要视图（分区索引 + Info 扁平化），
+  新增 `section`/`max_rows` 按分区下钻，明细行扁平化为 {列名: 文本}。
+- **get_dataset / get_dataset_variables 职责分工**：前者只回数据集元数据，
+  后者是变量清单首选；描述互相引用，不再让调用方二选一靠猜。
+
+### Added
+
+- **version='latest'**：所有带 version 的工具可自动从产品列表解析最新数字版本
+  （如 sdtmig→3-4、adam→2-1、adamig→1-3；忽略 ap-1-0/md-1-1/adae-1-0 等兄弟 IG）。
+- **standard 参数 enum 化**：schema 限定 7 个主流标准，把拼写错误拦在参数校验层。
+- **search 增强**：结果客户端缓存 24h；新增 `type`（命中类型过滤，大小写不敏感）、
+  `limit`/`offset`（客户端分页）；响应带 totalHits/returned 等元数据。
+- **get_term 支持术语名**：term 参数接受 C 代码或术语名（大小写不敏感），
+  名称未命中时报错附 difflib 相近候选；缓存按解析后的 C 代码存。
+- **ToolAnnotations**：全部 15 个工具标注 `readOnlyHint=true`。
+- 依赖下限提升到 `mcp>=1.6.0`（ToolAnnotations 引入版本），上限 `<2.0.0` 不变。
+
 ## 0.1.5
 
 ### Security

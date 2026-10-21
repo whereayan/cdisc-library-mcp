@@ -110,3 +110,21 @@ search(query) → 直接搜索关键词
 - 使用 MCP：cdisc-library
 - 调用 Skill：无
 - 遵循 Rule：anya-persona-priority-rule.md、priority-rules.md、python-environment-guidelines.md、tool-usage-declaration.md
+---
+
+## 0.1.6 变更说明（2026-10）
+
+本目录各文档是 0.1.4/0.1.5 时期的测试快照，其中「返回结果示例」为**原始 API 载荷**。
+0.1.6 起工具行为有以下全局变化，阅读旧快照时请注意：
+
+1. **响应默认瘦身**：所有工具默认剥除 `_links`/`links`/`@search.*` 噪声，
+   链接块折叠为紧凑的 `refs`（标签 → href）映射；每个工具新增可选参数
+   `raw`（boolean，默认 false），传 `true` 返回未瘦身的原始载荷（即旧快照中的形态）。
+2. **`standard` 参数改为 enum**：只接受 `sdtm, sdtmig, sendig, adam, adamig, cdash, cdashig`。
+3. **`version` 支持 `'latest'`**：所有带 version 的工具都可传 `'latest'`，
+   由产品列表解析出当前最新数字版本（如 sdtmig → 3-4）。
+4. **ADaM URL 修复**：ADaM 基础模型正确路径是 `/mdr/adam/adam-2-1`
+   （旧版拼的 `/mdr/adam/2-1` 实为 404），`standard='adam'` 从 0.1.6 起才真正可用。
+5. 签名变化的工具：`search`、`compare_versions`、`get_term`，
+   详见各自文档（已按 0.1.6 更新）。
+6. 所有工具带 `readOnlyHint=true` 注解（全部为只读 GET）。

@@ -1,5 +1,7 @@
 # get_term - 获取术语详情
 
+> 已按 0.1.6 更新：term 参数支持术语名（自动解析为 C 代码）；响应默认瘦身。
+
 ## 工具描述
 
 获取特定术语的详细信息。
@@ -7,26 +9,38 @@
 ## 使用方法
 
 ```typescript
-mcp__cdisc-library__get_term(package: string, codelist: string, term: string)
+mcp__cdisc-library__get_term(package: string, codelist: string, term: string, raw?: boolean)
 ```
 
 **参数**：
 - `package` (必需): 包名称，如 `sdtmct-2024-03-29`
 - `codelist` (必需): 编码 ID，如 `C141657`
-- `term` (必需): 术语 ID，如 `C174106`
+- `term` (必需): 术语引用，两种写法任选其一：
+  1. **C 代码**，如 `C174106`（直接使用）
+  2. **术语名**，如 `Female`（不区分大小写；在该 codelist 的术语列表内解析成
+     C 代码，列表本身有缓存，至多多一次请求；未命中时报错并给出相近候选）
+- `raw` (可选): true 返回未瘦身原始载荷，默认 false
 
 ## 示例调用
 
 ```typescript
-// 获取术语 C174106 的详情
+// 按 C 代码
 mcp__cdisc-library__get_term({
   package: "sdtmct-2024-03-29",
   codelist: "C141657",
   term: "C174106"
 })
+
+// 按术语名（0.1.6 新增；实测：'alpha-1 acid glycoprotein measurement'
+// → C100429，submissionValue=A1AGLP）
+mcp__cdisc-library__get_term({
+  package: "sdtmct-2026-09-25",
+  codelist: "C65047",
+  term: "alpha-1 acid glycoprotein measurement"
+})
 ```
 
-## 返回结果示例
+## 返回结果示例（raw=true 的原始形态；默认视图会把 _links 折叠为 refs）
 
 ```json
 {
@@ -93,4 +107,5 @@ mcp__cdisc-library__get_term({
 
 ## 测试状态
 
-✅ 测试通过 - 成功获取术语 C174106 详情
+✅ 0.1.4 实测通过（C 代码）；✅ 0.1.6 实测通过（术语名解析）；
+名称未命中的报错、相近候选提示、按解析后代码写缓存均有单元测试覆盖。

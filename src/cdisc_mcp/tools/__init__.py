@@ -5,6 +5,7 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 
 from ..client import CDISCClient
+from ..utils.slim import slim
 from .standard import STANDARD_TOOLS
 from .dataset import DATASET_TOOLS
 from .codelist import CODELIST_TOOLS
@@ -24,14 +25,21 @@ async def register_tools(server: Server, client: CDISCClient) -> None:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-        result = await _execute_tool(client, name, arguments)
+        args = dict(arguments or {})
+        # raw=true 是全局逃生舱：跳过响应瘦身，返回原始 API 载荷。
+        raw = bool(args.pop("raw", False))
+        result = await _execute_tool(client, name, args, raw=raw)
+        if not raw:
+            result = slim(result)
         return [TextContent(
             type="text",
             text=json.dumps(result, ensure_ascii=False, indent=2)
         )]
 
 
-async def _execute_tool(client: CDISCClient, name: str, args: dict) -> dict:
+async def _execute_tool(
+    client: CDISCClient, name: str, args: dict, raw: bool = False
+) -> dict:
     """Execute a tool by name."""
     # Product tools
     if name == "get_products":
@@ -75,10 +83,20 @@ async def _execute_tool(client: CDISCClient, name: str, args: dict) -> dict:
 
     # Search tools
     elif name == "search":
-        return await client.search(args["query"])
+        return await client.search(
+            args["query"],
+            type=args.get("type"),
+            limit=args.get("limit"),
+            offset=args.get("offset") or 0,
+        )
     elif name == "compare_versions":
         return await client.compare_versions(
-            args["standard"], args["version1"], args["version2"]
+            args["standard"],
+            args["old_version"],
+            args["new_version"],
+            section=args.get("section"),
+            max_rows=args.get("max_rows", 200),
+            raw=raw,
         )
 
     else:

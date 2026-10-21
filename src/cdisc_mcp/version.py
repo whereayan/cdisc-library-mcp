@@ -4,4 +4,4 @@ Bumped here only; ``pyproject.toml`` reads it via hatchling's dynamic version an
 the MCP server reports it at runtime, so the three can no longer drift apart.
 """
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"

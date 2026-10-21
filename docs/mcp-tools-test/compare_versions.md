@@ -1,122 +1,89 @@
 # compare_versions - 版本差异比较
 
+> 已按 0.1.6 更新：参数改名 old_version/new_version（原 version1/version2），
+> 默认返回摘要视图，新增 section 下钻与 max_rows；version 支持 'latest'。
+
 ## 工具描述
 
-比较两个版本之间的差异，包括新增、删除、修改的内容。
+比较同一标准两个版本之间的差异。
+
+完整 diff 载荷可达数十 MB（实测 SDTMIG 3-3→3-4 约 29 MB），直接返回会撑爆
+LLM 上下文并导致客户端超时，因此 0.1.6 起默认返回**摘要视图**：
+差异分区索引（名称 + 行数）+ Info 分区内容；明细按分区下钻获取。
 
 ## 使用方法
 
 ```typescript
-mcp__cdisc-library__compare_versions(standard: string, version1: string, version2: string)
+mcp__cdisc-library__compare_versions(
+  standard: string,
+  old_version: string,
+  new_version: string,
+  section?: string,
+  max_rows?: number,
+  raw?: boolean
+)
 ```
 
 **参数**：
-- `standard` (必需): 标准名称，如 `sdtm`
-- `version1` (必需): 第一个版本，如 `1-7`
-- `version2` (必需): 第二个版本，如 `1-8`
+- `standard` (必需): 标准名称（enum）: `sdtm, sdtmig, sendig, adam, adamig, cdash, cdashig`
+- `old_version` (必需): 旧版本号，如 `3-3`（也支持 `3.3` / `latest`）
+- `new_version` (必需): 新版本号，如 `3-4`；传反会自动交换并在 `note` 中说明
+- `section` (可选): 只返回指定分区的明细行（名称来自摘要里的 `sections` 索引）
+- `max_rows` (可选): section 明细最多返回行数，默认 200，超出标注 `truncated`
+- `raw` (可选): true 返回未汇总的完整 diff 载荷（警告：可达数十 MB）
+
+**URL 规则（0.1.6 修复）**：diff 路径与产品路径同构，
+`/mdr/diff/{group}/{new-tail}/{old-tail}`；ADaMIG 为
+`/mdr/diff/adam/adamig-1-3/adamig-1-2`（旧版拼的 `/mdr/diff/adamig/...` 实为 404）。
+请求采用单次 45s 超时、不重试，避免撞 MCP 客户端的 60s 上限。
 
 ## 示例调用
 
 ```typescript
-// 比较 SDTM v1.7 和 v1.8 的差异
+// 1) 摘要视图
 mcp__cdisc-library__compare_versions({
-  standard: "sdtm",
-  version1: "1-7",
-  version2: "1-8"
+  standard: "sdtmig", old_version: "3-3", new_version: "3-4"
+})
+
+// 2) 下钻某分区前 50 行
+mcp__cdisc-library__compare_versions({
+  standard: "sdtmig", old_version: "3-3", new_version: "3-4",
+  section: "Domains", max_rows: 50
 })
 ```
 
-## 返回结果示例
+## 返回结果示例（摘要视图；取自 2026-10 真实响应）
 
 ```json
 {
-  "diff": [
-    {
-      "body": [
-        {
-          "Attribute": [{"text": "Generated"}],
-          "Value": [{"text": "2026-04-08T08:40:11"}]
-        },
-        {
-          "Attribute": [{"text": "Updated Version"}],
-          "Value": [{"text": "SDTM v1.8"}]
-        },
-        {
-          "Attribute": [{"text": "Previous Version"}],
-          "Value": [{"text": "SDTM v1.7"}]
-        }
-      ],
-      "head": ["Attribute", "Value"],
-      "title": "Info"
-    },
-    {
-      "body": [
-        {
-          "Column Name": [{"text": "Updated Version"}],
-          "Description": [{"text": "Newer version of the standards being compared."}]
-        },
-        {
-          "Column Name": [{"text": "Previous Version"}],
-          "Description": [{"text": "Older version of the standards being compared."}]
-        },
-        {
-          "Column Name": [{"text": "Action"}],
-          "Description": [{"text": "Change to the standard; possible values are \"Add\", \"Drop\", \"Type Update\", and \"Value Update\"."}]
-        }
-        // ... 更多列说明
-      ],
-      "head": ["Column Name", "Description"],
-      "title": "Column Definitions"
-    },
-    {
-      "body": [
-        // 具体的差异内容
-      ],
-      "head": ["Updated Version", "Previous Version", "Action", "Impact", "Description", "Reason"],
-      "title": "Change Summary"
-    }
-  ]
+  "standard": "sdtmig",
+  "old_version": "3-3",
+  "new_version": "3-4",
+  "info": [
+    {"Attribute": "Generated", "Value": "2026-10-21T12:26:32"},
+    {"Attribute": "Updated Version", "Value": "SDTMIG v3.4"},
+    {"Attribute": "Previous Version", "Value": "SDTMIG v3.3"}
+  ],
+  "sections": [
+    {"section": "Info", "rows": 3},
+    {"section": "ReadMe for Basic Tab", "rows": 11},
+    {"section": "ReadMe for Advanced Tab", "rows": 14},
+    {"section": "Basic", "rows": 889},
+    {"section": "Advanced", "rows": 13384},
+    {"section": "Validation", "rows": 1}
+  ],
+  "hint": "此为摘要视图。传 section='<分区名>' 查看该分区明细（max_rows 控制行数，默认 200）；raw=true 返回未汇总的完整 diff（可达数十 MB，谨慎使用）"
 }
 ```
 
-## 返回字段说明
+section 明细模式下，每行由 `{"列名": [{"text": "..."}]}` 扁平化为 `{"列名": "..."}`，如：
 
-结果是一个 `diff` 数组，包含多个表格：
-
-| 表格 | 说明 |
-|------|------|
-| Info | 比较的基本信息（生成时间、版本信息） |
-| Column Definitions | 列定义说明 |
-| Change Summary | 变化摘要，包含具体的差异内容 |
-
-## Action 类型说明
-
-| 值 | 说明 |
-|----|------|
-| Add | 新增内容 |
-| Drop | 删除内容 |
-| Type Update | 类型更新 |
-| Value Update | 值更新 |
-
-## Impact 说明
-
-| 值 | 说明 |
-|----|------|
-| High | 高影响，可能需要修改现有数据 |
-| Medium | 中等影响 |
-| Low | 低影响，主要是文档或元数据变化 |
-
-## 使用场景
-
-- 了解标准升级带来的变化
-- 评估版本迁移的影响
-- 确定需要修改的数据结构
-
-## 注意事项
-
-- 结果数据量较大，可能返回 15MB+ 的内容
-- 建议在需要详细比较时使用
+```json
+{"Column Name": "Updated Version", "Description": "Newer version of the standards being compared."}
+```
 
 ## 测试状态
 
-✅ 测试通过 - 成功比较 SDTM v1.7 和 v1.8，返回详细差异（结果存储在独立文件中，约 15MB）
+✅ 0.1.6 实测：sdtmig 3-3→3-4（完整载荷约 29 MB）首次拉取约 13s，
+摘要/下钻均在客户端 60s 限制内返回（旧版直接超时）；
+adamig diff URL、新旧版本自动交换、分区下钻与截断均有单元测试覆盖。

@@ -72,6 +72,14 @@ pip install cdisc-library-mcp
 
 ## 可用工具
 
+### 全局约定（0.1.6+）
+
+- **响应默认瘦身**：剥除 `_links`/`links`/`@search.*` 噪声，链接折叠为 `refs`（标签→href）；
+  每个工具都有 `raw`（boolean，默认 false），传 true 拿未瘦身原始载荷。
+- **`standard` 为 enum**：`sdtm, sdtmig, sendig, adam, adamig, cdash, cdashig`。
+- **`version` 支持 `'latest'`**：自动解析为该产品当前最新版本。
+- 所有工具均为只读 GET，带 `readOnlyHint=true` 注解。
+
 ### 标准查询
 | 工具 | 描述 |
 |------|------|
@@ -83,8 +91,8 @@ pip install cdisc-library-mcp
 | 工具 | 描述 |
 |------|------|
 | `get_datasets` | 获取数据集列表 |
-| `get_dataset` | 获取数据集详情 |
-| `get_dataset_variables` | 获取变量列表 |
+| `get_dataset` | 获取数据集元数据（描述、所属类等） |
+| `get_dataset_variables` | 获取数据集的完整变量列表（查变量首选） |
 | `get_variable` | 获取变量详情 |
 
 ### 控制术语
@@ -95,13 +103,13 @@ pip install cdisc-library-mcp
 | `get_codelists` | 获取编码列表 |
 | `get_codelist` | 获取编码详情 |
 | `get_codelist_terms` | 获取术语列表 |
-| `get_term` | 获取术语详情 |
+| `get_term` | 获取术语详情（term 支持 C 代码或术语名） |
 
 ### 搜索与比较
 | 工具 | 描述 |
 |------|------|
-| `search` | 全局搜索 CDISC Library |
-| `compare_versions` | 版本差异比较 |
+| `search` | 全局搜索 CDISC Library（支持 type 过滤、limit/offset 分页，结果缓存 24h） |
+| `compare_versions` | 版本差异比较（默认摘要视图，section 下钻明细） |
 
 ## 版本号格式
 
@@ -112,7 +120,9 @@ CDISC Library API 使用 `-` 分隔版本号：
 | SDTM | `1-8`, `2-0` | `1.8`, `2.0` |
 | SDTMIG | `3-4`, `3-3` | `3.4`, `3.3` |
 
-工具会自动转换格式，支持两种输入。
+工具会自动转换格式，支持两种输入；也可传 `latest` 自动解析为最新版本。
+
+注意 standard 与 version 必须匹配（如 sdtmig 用 3-x，sdtm 用 1-x/2-x），拿不准时传 `latest`。
 
 ## 环境变量
 

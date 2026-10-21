@@ -25,11 +25,13 @@ classifiers = [
 ]
 
 dependencies = [
+    # Lower bound: Tool/ToolAnnotations fields used by the tool definitions
+    # (annotations arrived with the 2025-03-26 spec, SDK 1.6).
     # Upper bound required: the server registers components with the
     # ``@server.list_resources()`` / ``@server.list_tools()`` decorator API, which
     # mcp 2.0.0 removed (``'Server' object has no attribute 'list_resources'``).
     # Migrating to the 2.x API is tracked separately; until then 2.x must not resolve.
-    "mcp>=0.9.0,<2.0.0",
+    "mcp>=1.6.0,<2.0.0",
     "httpx>=0.25.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",

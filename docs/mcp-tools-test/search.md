@@ -1,81 +1,78 @@
 # search - 全局搜索 CDISC Library
 
+> 已按 0.1.6 更新：新增 type/limit/offset 参数与客户端缓存；响应默认瘦身。
+
 ## 工具描述
 
 全局搜索 CDISC Library，可以搜索标准、数据集、变量、术语等。
+命中按相关度排序；同一查询的结果在客户端缓存 24h（分页/过滤不重复请求）。
 
 ## 使用方法
 
 ```typescript
-mcp__cdisc-library__search(query: string)
+mcp__cdisc-library__search(query: string, type?: string, limit?: number, offset?: number, raw?: boolean)
 ```
 
 **参数**：
 - `query` (必需): 搜索关键词
+- `type` (可选): 按命中类型过滤（不区分大小写），如 `Analysis Variable`、`Dataset`
+- `limit` (可选): 最多返回的命中条数（客户端截断）
+- `offset` (可选): 跳过的命中条数，与 limit 配合分页，默认 0
+- `raw` (可选): true 返回未瘦身原始载荷，默认 false
+
+说明：API 单次查询最多返回 100 条命中（`totalHits` 给出总数、`hasMore` 标注是否截断），
+type/limit/offset 均在这 100 条内做客户端过滤与分页。
 
 ## 示例调用
 
 ```typescript
-// 搜索 SDTM 相关内容
-mcp__cdisc-library__search({ query: "sdtm" })
+// 搜索 ADaM 分析变量 AVAL，只取前 10 条
+mcp__cdisc-library__search({ query: "AVAL", type: "Analysis Variable", limit: 10 })
+
+// 第二页
+mcp__cdisc-library__search({ query: "AVAL", limit: 10, offset: 10 })
 ```
 
-## 返回结果示例
+## 返回结果示例（默认瘦身视图；取自 2026-10 真实响应，长文本有截断）
 
 ```json
 {
+  "query": "AVAL",
+  "totalHits": 237,
   "hasMore": true,
+  "returned": 1,
+  "typeFilter": "Analysis Variable",
+  "matchedInPage": 100,
+  "limit": 1,
   "hits": [
     {
-      "@search.highlights": {
-        "definition": [
-          "Version 1.6 of the CDISC Study Data Tabulation Model (<em>SDTM</em>)."
-        ]
-      },
-      "@search.score": 27.294525,
-      "codelist": "SDTM Version Response",
-      "conceptId": "C161430",
-      "definition": "Version 1.6 of the CDISC Study Data Tabulation Model (SDTM).",
-      "href": "/mdr/ct/packages/sdtmct-2022-12-16/codelists/C160923/terms/C161430",
-      "label": "CDISC SDTM Model Version 1.6",
-      "links": [
-        {
-          "href": "/mdr/ct/packages/sdtmct-2022-12-16/codelists/C160923",
-          "linkName": "parentCodelist",
-          "title": "CDISC SDTM Model Version ResponseTerminology",
-          "type": "Code List"
-        }
-        // ... 更多链接
-      ],
-      "name": "CDISC SDTM Model Version 1.6",
-      "parentHref": "/mdr/ct/packages/sdtmct-2022-12-16/codelists/C160923"
+      "core": "Required",
+      "dataStructure": "BDS for TTE",
+      "description": "AVAL is the elapsed time to the event of interest from the origin. ...",
+      "href": "/mdr/adam/adam-tte-1-0/datastructures/ADTTE/variables/AVAL",
+      "label": "Analysis Value",
+      "name": "AVAL",
+      "parentHref": "/mdr/adam/adam-tte-1-0",
+      "parentName": "ADaM Basic Data Structure for Time-to-Event Analyses Version 1.0",
+      "parentType": "Implementation Guide",
+      "product": "ADaM BDS for TTE v1.0",
+      "simpleDatatype": "Num",
+      "type": "Analysis Variable",
+      "variableSet": "Analysis Parameter Variables",
+      "refs": {
+        "parentDatastructure": "/mdr/adam/adam-tte-1-0/datastructures/ADTTE",
+        "parentProduct": "/mdr/adam/adam-tte-1-0"
+      }
     }
-    // ... 更多搜索结果
   ]
 }
 ```
 
-## 返回字段说明
-
-| 字段 | 说明 |
-|------|------|
-| `hasMore` | 是否还有更多结果 |
-| `hits` | 搜索结果数组 |
-| `@search.score` | 搜索匹配分数 |
-| `@search.highlights` | 高亮显示匹配部分 |
-| `conceptId` | 概念 ID |
-| `definition` | 定义描述 |
-| `href` | 资源路径 |
-| `label` | 标签名称 |
-| `name` | 名称 |
-| `links` | 相关链接列表 |
-
-## 使用场景
-
-- 快速查找特定标准、数据集或术语
-- 不确定具体资源路径时进行探索性搜索
-- 获取某个主题相关的所有资源
+与旧版（0.1.5 及以前）的差异：
+- `@search.score` / `@search.highlights` 默认被剥除（`raw=true` 可见）；
+- `links` 折叠为 `refs`；
+- 新增 `query` / `returned` 等元数据字段，过滤分页在客户端完成。
 
 ## 测试状态
 
-✅ 测试通过 - 搜索 "sdtm" 返回大量相关结果
+✅ 0.1.4 实测通过（原始载荷）；0.1.6 起默认返回瘦身视图，行为由单元测试覆盖。
