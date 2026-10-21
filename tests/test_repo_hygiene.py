@@ -15,14 +15,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-SECRET_SHAPES = [
-    ("32-hex key", re.compile(r"\b[0-9a-f]{32}\b")),
-    ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")),
-    ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-]
 ALLOW_PLACEHOLDER = re.compile(
     r"(?i)your[-_]?api[-_]?key[-_]?here|REPLACE[_-]?ME|changeme|^\s*$"
 )
+
+
+def _load_scanner():
+    path = ROOT / "scripts" / "check_secrets.py"
+    spec = importlib.util.spec_from_file_location("check_secrets", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _git_files() -> list[str]:
@@ -43,23 +46,17 @@ class TestTrackedFiles:
             assert path not in tracked, f"{path} 被 git 跟踪，可能带上凭据"
 
     def test_tracked_text_files_have_no_secret_shapes(self):
+        """Delegate to the pre-publish scanner: one rule set, not two.
+
+        Re-implementing the patterns here would let the gate and the test drift
+        apart (and would not honour the ``allowlist secret`` marker).
+        """
+        gate = _load_scanner()
         offenders = []
         for rel in _git_files():
             p = ROOT / rel
-            if not p.is_file():
-                continue
-            try:
-                text = p.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                continue
-            for label, pat in SECRET_SHAPES:
-                for m in pat.finditer(text):
-                    # a placeholder or a doc mentioning a version-ish hex string
-                    line = text.count("\n", 0, m.start()) + 1
-                    context = text.splitlines()[line - 1]
-                    if ALLOW_PLACEHOLDER.search(context):
-                        continue
-                    offenders.append(f"{rel}:{line} {label} → {m.group(0)[:6]}…")
+            if p.is_file():
+                offenders += gate.scan_blob(p.read_bytes(), rel)
         assert not offenders, "跟踪文件中出现疑似密钥：" + "; ".join(offenders)
 
     def test_env_is_ignored(self):
@@ -103,19 +100,11 @@ class TestSdistWhitelist:
             assert ALLOW_PLACEHOLDER.search(value.strip()), f".env.example 含真实凭据: {line}"
 
 
-def _load_scanner():
-    path = ROOT / "scripts" / "check_secrets.py"
-    spec = importlib.util.spec_from_file_location("check_secrets", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 class TestSecretGate:
     """The pre-publish scanner must catch live-looking keys and ignore placeholders.
 
     Detection patterns themselves are exempted via the ``allowlist secret``
-    trailing comment; the scanner has honour that marker (see ALLOW_MARKER).
+    trailing comment, which the scanner honours (see ALLOW_MARKER).
     """
 
     def test_flags_a_real_looking_key(self):
@@ -145,12 +134,9 @@ class TestSecretGate:
         assert gate.scan_blob(b"token: ghp_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr", "x")  # allowlist secret
         assert gate.scan_blob(b"-----BEGIN RSA PRIVATE KEY-----\nAAAA", "x")  # allowlist secret
 
-    def test_tracked_tree_scans_clean(self):
-        """The repository as committed must pass its own gate."""
+    def test_allowlist_marker_exempts_only_the_marked_line(self):
         gate = _load_scanner()
-        findings = []
-        for rel in _git_files():
-            p = ROOT / rel
-            if p.is_file():
-                findings += gate.scan_blob(p.read_bytes(), rel)
-        assert not findings, "; ".join(findings)
+        half = "0123456789abcdef"
+        key_line = '{"CDISC_API_KEY": "' + half + half + '"}'
+        assert len(gate.scan_blob(key_line.encode(), "x")) >= 1, "未标记时应命中"
+        assert gate.scan_blob((key_line + "  # allowlist secret").encode(), "x") == [], "标记行应豁免"

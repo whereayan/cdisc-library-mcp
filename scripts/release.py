@@ -3,7 +3,7 @@
 
 用法:
     python scripts/release.py 0.1.5                 # 校验 + 测试 + 构建 + 检查，不上传
-    python scripts/release.py 0.1.5 --upload        # 全流程并上传（凭据取自环境变量）
+    python scripts/release.py 0.1.5 --upload        # 全流程并上传（凭据见下）
     python scripts/release.py 0.1.5 --upload --repo testpypi
 
 设计约定（0.1.4 的教训）:
@@ -12,8 +12,8 @@
     旧正则会把它们写坏）。
   * 密钥扫描是硬闸门：跟踪文件与构建产物都要过，不过就停。0.1.4 的 sdist 里
     带了真实 CDISC_API_KEY（.roo/mcp.json），本脚本能拦住同类事故。
-  * PyPI token 只从环境变量读取（TWINE_PASSWORD / PYPI_TOKEN），绝不接受命令行参数
-    —— 命令行参数会留在 shell history 与进程列表里。
+  * PyPI 凭据来自环境变量（TWINE_PASSWORD / PYPI_TOKEN）或 twine 自己的
+    ~/.pypirc / keyring；绝不接受命令行参数——argv 会留在 shell history 与进程列表里。
 """
 
 from __future__ import annotations
@@ -175,11 +175,18 @@ def main() -> None:
         return
 
     token = os.environ.get("TWINE_PASSWORD") or os.environ.get("PYPI_TOKEN")
-    if not token:
-        sys.exit("✘ 缺少凭据：请设置 TWINE_PASSWORD 或 PYPI_TOKEN（勿用命令行参数）")
-    env = dict(os.environ, TWINE_USERNAME="__token__", TWINE_PASSWORD=token)
+    env = dict(os.environ)
+    if token:
+        # Token from the environment only. Never accept it as a command-line
+        # argument: argv is visible in shell history and to other processes.
+        env["TWINE_USERNAME"] = "__token__"
+        env["TWINE_PASSWORD"] = token
+    else:
+        # Let twine fall back to ~/.pypirc / keyring / its own prompt. Do not
+        # paste a token into chat just to satisfy this script.
+        print("ℹ 未设 TWINE_PASSWORD/PYPI_TOKEN，改由 twine 从 ~/.pypirc 或 keyring 取凭据")
     repo_url = "https://upload.pypi.org/legacy/" if args.repo == "pypi" else "https://test.pypi.org/legacy/"
-    run([*tw, "upload", "--repository-url", repo_url, *(str(p) for p in artifacts)], env=env)
+    run([*tw, "upload", "--repository-url", repo_url, *(str(p) for p in artifacts)], env=env, text=True)
     host = "test.pypi.org" if args.repo == "testpypi" else "pypi.org"
     print(f"✔ 已发布: https://{host}/project/cdisc-library-mcp/{version}/")
 
