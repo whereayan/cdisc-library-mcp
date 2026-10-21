@@ -56,8 +56,8 @@ path = "src/cdisc_mcp/version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cdisc_mcp"]
 
-# Whitelist, not blacklist: the 0.1.4 sdist shipped .roo/mcp.json with a live
-# CDISC_API_KEY because the default sdist recipe sweeps in repository files.
+# Whitelist, not blacklist: the default sdist recipe sweeps in repository files,
+# which once carried a local client config (with an API key) onto PyPI.
 # Only these paths may ever reach PyPI; add a path here deliberately, never by
 # accident. Run scripts/check_secrets.py before uploading as a second gate.
 [tool.hatch.build.targets.sdist]

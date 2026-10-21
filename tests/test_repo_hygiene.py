@@ -1,8 +1,9 @@
 """Repo-hygiene tests: keep credentials out of git and out of the distribution.
 
-Background: the 0.1.4 sdist on PyPI contained ``.roo/mcp.json`` with a live
-CDISC_API_KEY (the file was also public on GitHub). These tests fail loudly if a
-secret-shaped value comes back, or if the sdist whitelist is loosened by accident.
+Background: an early release's sdist swept in a local client config file that
+held an API key. These tests fail loudly if a secret-shaped value comes back,
+if such a config becomes tracked again, or if the sdist whitelist is loosened
+by accident. Credentials belong in environment variables or ~/.cdisc-mcp/.env.
 """
 
 import importlib.util

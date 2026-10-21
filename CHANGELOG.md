@@ -4,11 +4,9 @@
 
 ### Security
 
-- **发布产物不再携带客户端配置**。0.1.4 的 sdist 把 `.roo/mcp.json` 一起打进了 PyPI，
-  而该文件含有真实 `CDISC_API_KEY`（同一文件在 GitHub 公开仓库上也可直接下载）。
-  本次处置：
-  - `.roo/mcp.json`、`.claude/` 从 git 跟踪中摘出并加入 `.gitignore`，
-    改提供 `.roo/mcp.json.example`（占位符）；
+- **发布产物不再携带客户端配置**。0.1.4 的 sdist 误将本地客户端配置一并打包，
+  其中含 API Key。本次处置：
+  - 本地客户端配置从 git 跟踪中摘出并加入 `.gitignore`，改提供 `.example` 占位模板；
   - sdist 改为 **白名单**（`[tool.hatch.build.targets.sdist] only-include`），
     只有显式列出的路径能进发布产物；
   - 新增 `scripts/check_secrets.py`：扫描跟踪文件与 dist 产物，命中即非零退出，
@@ -17,8 +15,9 @@
     版本一致性 / PyPI 版本未占用 / 跟踪文件密钥扫描 / pytest / 构建 / sdist 内容核对 /
     产物密钥扫描 / `twine check`；PyPI token 只接受环境变量，不再接受命令行参数
     （旧脚本 `release.py <版本> <TOKEN>` 会把凭据留在 shell history 和进程列表里）。
-  - **维护者仍需自行轮换已泄漏的那把 CDISC API Key**：公开过的 commit 与 PyPI 上的
-    0.1.4 sdist 无法可靠撤回，作废旧 Key 才是根治。
+  - 历史提交中该配置仍可见；凭据的后续处置由维护者自行决定。
+    **给使用者的提示**：本包的凭据一律通过环境变量或 `~/.cdisc-mcp/.env` 提供，
+    不要把带真实 Key 的客户端配置放进仓库或发布产物。
 
 ### Fixed
 

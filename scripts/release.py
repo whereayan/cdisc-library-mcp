@@ -10,8 +10,8 @@
   * 版本号唯一来源是 src/cdisc_mcp/version.py；本脚本只在 --write-version 时改它，
     不再用正则去刷 pyproject.toml / server.py（那两处已改为动态版本 / 引用常量，
     旧正则会把它们写坏）。
-  * 密钥扫描是硬闸门：跟踪文件与构建产物都要过，不过就停。0.1.4 的 sdist 里
-    带了真实 CDISC_API_KEY（.roo/mcp.json），本脚本能拦住同类事故。
+  * 密钥扫描是硬闸门：跟踪文件与构建产物都要过，不过就停。早期版本的 sdist
+    曾把本地客户端配置（含 API Key）一起发出去，本脚本能拦住同类事故。
   * PyPI 凭据来自环境变量（TWINE_PASSWORD / PYPI_TOKEN）或 twine 自己的
     ~/.pypirc / keyring；绝不接受命令行参数——argv 会留在 shell history 与进程列表里。
 """
@@ -130,7 +130,7 @@ def main() -> None:
         sys.exit(f"✘ {args.repo} 上已存在 {version}：版本号不能复用，请递增")
     print(f"✔ 包版本自报 {version}；{args.repo} 上尚未占用")
 
-    # 2) 跟踪文件不得含密钥（0.1.4 的 .roo/mcp.json 教训）
+    # 2) 跟踪文件不得含密钥（历史教训：本地客户端配置曾随 sdist 外泄）
     gate_secret_scan("跟踪文件密钥扫描", ["--tracked"])
 
     # 3) 测试

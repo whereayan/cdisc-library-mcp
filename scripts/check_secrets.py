@@ -2,8 +2,9 @@
 """Pre-publish secret gate for cdisc-library-mcp.
 
 Scans build artifacts (and, optionally, the git-tracked source tree) for
-credentials that must never reach PyPI. 0.1.4 shipped ``.roo/mcp.json`` with a
-live ``CDISC_API_KEY`` inside its sdist, which is exactly what this catches.
+credentials that must never reach PyPI. An early release shipped a local client
+config containing a live API key inside its sdist, which is exactly what this
+catches.
 
 Usage:
     python scripts/check_secrets.py dist/*            # check artifacts

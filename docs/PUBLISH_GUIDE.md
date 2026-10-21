@@ -39,7 +39,7 @@ git clone https://github.com/你的用户名/cdisc-library-mcp.git
 
 > **0.1.5 起统一使用 `scripts/release.py`，它把所有闸门串成一条命令。**
 > 手动步骤（下方「闸门清单」）保留作故障排查参考；不要绕过密钥扫描直接 `twine upload`。
-> 教训：0.1.4 的 sdist 把 `.roo/mcp.json` 连同**真实 CDISC_API_KEY** 一起发上了 PyPI。
+> 教训：早期版本的 sdist 曾把本地客户端配置（含 API Key）一起发上了 PyPI。
 
 ### 一条命令发布
 
