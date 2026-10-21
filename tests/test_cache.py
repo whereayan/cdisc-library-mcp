@@ -4,7 +4,7 @@ import json
 import time
 import pytest
 from pathlib import Path
-from cdisc_mcp.cache import CacheManager
+from cdisc_mcp.cache import CACHE_FORMAT_VERSION, CacheManager
 
 
 class TestCacheManager:
@@ -86,13 +86,20 @@ class TestCacheManager:
         assert cache_dir.is_dir()
 
     def test_cache_file_structure(self, tmp_path):
-        """Test cache file structure."""
+        """One file per distinct key, keyed by the whole key (see CACHE_FORMAT_VERSION)."""
         cache = CacheManager(str(tmp_path))
 
         cache.set("products", {"products": []})
         cache.set("standards/sdtm_1-8", {"name": "SDTM"})
 
-        assert (tmp_path / "products.json").exists()
+        products_file = cache._get_cache_file_path("products")
+        standards_file = cache._get_cache_file_path("standards/sdtm_1-8")
+
+        assert products_file.exists()
+        assert standards_file.exists()
+        assert products_file != standards_file
+        assert products_file.parent.name == "misc"
+        assert standards_file.parent.name == "standards"
 
     def test_cache_metadata_tracking(self, tmp_path):
         """Test cache metadata tracking."""
@@ -106,6 +113,8 @@ class TestCacheManager:
         with open(cache.metadata_file) as f:
             metadata = json.load(f)
 
-        assert "test_key" in metadata
-        assert "created_at" in metadata["test_key"]
-        assert "ttl" in metadata["test_key"]
+        assert metadata["format"] == CACHE_FORMAT_VERSION
+        entry = metadata["entries"]["test_key"]
+        assert "created_at" in entry
+        assert "ttl" in entry
+        assert (tmp_path / entry["file"]).exists()

@@ -13,6 +13,8 @@ from mcp.server.models import InitializationOptions
 from .config import CDISCConfig
 from .client import CDISCClient
 from .cache import CacheManager
+from .version import __version__
+from .prompts import register_prompts
 from .resources import register_resources
 from .tools import register_tools
 
@@ -50,12 +52,13 @@ class CDISCMCPServer:
         self.config = config
         self.cache = CacheManager(config.get_cache_path(), config.cache_ttl)
         self.client = CDISCClient(config, self.cache)
-        self.server = Server("cdisc-library-mcp", version="0.1.4")
+        self.server = Server("cdisc-library-mcp", version=__version__)
 
     async def setup(self) -> None:
         """Register MCP components."""
         await register_resources(self.server, self.client)
         await register_tools(self.server, self.client)
+        await register_prompts(self.server)
 
     async def run(self) -> None:
         """Start the MCP server."""

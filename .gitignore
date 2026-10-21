@@ -40,4 +40,6 @@ htmlcov/
 
 # Project specific
 .claude/
-.mcp.json
+.mcp.json.venv/
+dist/
+*.egg-info/

@@ -1,6 +1,7 @@
 """CDISC Library MCP Server - Clinical Data Standards Access via MCP."""
 
-__version__ = "0.1.4"
+from .version import __version__
+
 __author__ = "CDISC MCP Contributors"
 
 from .config import CDISCConfig

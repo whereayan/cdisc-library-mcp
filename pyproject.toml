@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cdisc-library-mcp"
-version = "0.1.4"
+dynamic = ["version"]
 description = "MCP Server for CDISC Library API - Clinical Data Standards Access"
 readme = "README.md"
 license = "MIT"
@@ -25,7 +25,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=0.9.0",
+    # Upper bound required: the server registers components with the
+    # ``@server.list_resources()`` / ``@server.list_tools()`` decorator API, which
+    # mcp 2.0.0 removed (``'Server' object has no attribute 'list_resources'``).
+    # Migrating to the 2.x API is tracked separately; until then 2.x must not resolve.
+    "mcp>=0.9.0,<2.0.0",
     "httpx>=0.25.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
@@ -45,6 +49,9 @@ cdisc-library-mcp = "cdisc_mcp.server:main"
 Homepage = "https://github.com/whereayan/cdisc-library-mcp"
 Documentation = "https://github.com/whereayan/cdisc-library-mcp#readme"
 Repository = "https://github.com/whereayan/cdisc-library-mcp"
+
+[tool.hatch.version]
+path = "src/cdisc_mcp/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cdisc_mcp"]
