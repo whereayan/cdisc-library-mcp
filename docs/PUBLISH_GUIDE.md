@@ -37,29 +37,68 @@ git clone https://github.com/你的用户名/cdisc-library-mcp.git
 
 ## 发布步骤
 
+> **0.1.5 起统一使用 `scripts/release.py`，它把所有闸门串成一条命令。**
+> 手动步骤（下方「闸门清单」）保留作故障排查参考；不要绕过密钥扫描直接 `twine upload`。
+> 教训：0.1.4 的 sdist 把 `.roo/mcp.json` 连同**真实 CDISC_API_KEY** 一起发上了 PyPI。
+
+### 一条命令发布
+
+```bash
+# 1) 演练：跑完所有闸门但不上传
+python scripts/release.py 0.1.5
+
+# 2) 正式：凭据只从环境变量给（绝不作为命令行参数）
+export TWINE_PASSWORD=pypi-AgE...    # PyPI API Token
+python scripts/release.py 0.1.5 --upload
+
+# 3) 先在测试库验证产物
+python scripts/release.py 0.1.5 --upload --repo testpypi
+```
+
+脚本会依次执行：版本一致性 → PyPI 版本未被占用 → 跟踪文件密钥扫描 → pytest → 构建 →
+sdist 内容核对 → 产物密钥扫描 → `twine check` → 上传。任一闸门不过即中止。
+
+### 闸门清单（手动等价步骤 / 排查用）
+
+```bash
+python scripts/check_secrets.py --tracked      # 仓库里不得有凭据
+tests: python -m pytest -q                      # 含 tests/test_repo_hygiene.py
+uv build || python -m build                     # 产出 dist/*.whl + *.tar.gz
+tar -tzf dist/cdisc_library_mcp-<V>.tar.gz       # 不得出现 .roo/ .claude/ .env
+python scripts/check_secrets.py dist/*.whl dist/*.tar.gz
+python -m twine check dist/*.whl dist/*.tar.gz   # twine 需 >= 7.0
+twine upload dist/*.whl dist/*.tar.gz
+```
+
 ### 方式一：发布到 PyPI
 
 #### 步骤 1: 安装发布工具
 
 ```bash
-pip install build twine
+pip install build "twine>=7" uv
 ```
+
+> `twine < 7` 会把 wheel 的 `Metadata-Version: 2.5` 误判为非法而报
+> `Invalid distribution metadata`，并非包本身有问题。
 
 #### 步骤 2: 构建 Python 包
 
 ```bash
-cd D:/AI_PROJECT/cdisc-library-mcp
-python -m build
+uv build          # 或 python -m build
 ```
 
-这将在 `dist/` 目录生成：
-- `cdisc_library_mcp-0.1.0.tar.gz` (源码包)
-- `cdisc_library_mcp-0.1.0-py3-none-any.whl` (wheel 包)
+这将在 `dist/` 目录生成（版本号取自 `src/cdisc_mcp/version.py`）：
+- `cdisc_library_mcp-<版本>.tar.gz` (源码包)
+- `cdisc_library_mcp-<版本>-py3-none-any.whl` (wheel 包)
+
+sdist 内容由 `pyproject.toml` 的 `[tool.hatch.build.targets.sdist] only-include`
+**白名单**决定。要发布新文件必须显式加入白名单——这是防止本地配置/凭据被顺手打包的关键。
 
 #### 步骤 3: 检查包内容
 
 ```bash
-twine check dist/*
+python scripts/check_secrets.py dist/*     # 密钥闸门
+twine check dist/*.whl dist/*.tar.gz
 ```
 
 #### 步骤 4: 上传到 PyPI

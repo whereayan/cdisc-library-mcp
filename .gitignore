@@ -21,13 +21,21 @@ wheels/
 *.egg
 
 # Virtual environments
-.env
-.venv
-env/
+.venv/
 venv/
+env/
 ENV/
 
-# IDE
+# Local secrets / env files (never commit real keys)
+.env
+.env.local
+*.local
+
+# Local agent / editor settings — machine specific, may carry credentials
+.claude/
+.roo/mcp.json
+.roo/settings.local.json
+.cursor/
 .idea/
 .vscode/
 *.swp
@@ -38,8 +46,11 @@ ENV/
 .coverage
 htmlcov/
 
-# Project specific
-.claude/
-.mcp.json.venv/
-dist/
-*.egg-info/
+# Lockfiles generated locally
+uv.lock
+
+# NOTE: .mcp.json and .roo/mcp.json.example are committed on purpose — they hold
+# the "your-api-key-here" placeholder only. Anything with a real CDISC_API_KEY
+# (client configs, .env) must stay out of git AND out of the sdist; the sdist uses
+# an explicit whitelist (see [tool.hatch.build.targets.sdist] in pyproject.toml),
+# and scripts/check_secrets.py is a pre-publish gate.

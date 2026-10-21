@@ -56,6 +56,27 @@ path = "src/cdisc_mcp/version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cdisc_mcp"]
 
+# Whitelist, not blacklist: the 0.1.4 sdist shipped .roo/mcp.json with a live
+# CDISC_API_KEY because the default sdist recipe sweeps in repository files.
+# Only these paths may ever reach PyPI; add a path here deliberately, never by
+# accident. Run scripts/check_secrets.py before uploading as a second gate.
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/cdisc_mcp",
+    "tests",
+    "docs",
+    "scripts",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    ".env.example",
+]
+
+[tool.hatch.build]
+# Ignore VCS-only paths (client configs live in dot-directories) when building.
+exclude-vcs = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

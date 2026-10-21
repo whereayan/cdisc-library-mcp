@@ -2,6 +2,24 @@
 
 ## 0.1.5
 
+### Security
+
+- **发布产物不再携带客户端配置**。0.1.4 的 sdist 把 `.roo/mcp.json` 一起打进了 PyPI，
+  而该文件含有真实 `CDISC_API_KEY`（同一文件在 GitHub 公开仓库上也可直接下载）。
+  本次处置：
+  - `.roo/mcp.json`、`.claude/` 从 git 跟踪中摘出并加入 `.gitignore`，
+    改提供 `.roo/mcp.json.example`（占位符）；
+  - sdist 改为 **白名单**（`[tool.hatch.build.targets.sdist] only-include`），
+    只有显式列出的路径能进发布产物；
+  - 新增 `scripts/check_secrets.py`：扫描跟踪文件与 dist 产物，命中即非零退出，
+    输出已脱敏（`31b1…9b（32 位）`），支持 `# allowlist secret` 行内豁免；
+  - `scripts/release.py` 重写为闸门流水线，上传前强制跑
+    版本一致性 / PyPI 版本未占用 / 跟踪文件密钥扫描 / pytest / 构建 / sdist 内容核对 /
+    产物密钥扫描 / `twine check`；PyPI token 只接受环境变量，不再接受命令行参数
+    （旧脚本 `release.py <版本> <TOKEN>` 会把凭据留在 shell history 和进程列表里）。
+  - **维护者仍需自行轮换已泄漏的那把 CDISC API Key**：公开过的 commit 与 PyPI 上的
+    0.1.4 sdist 无法可靠撤回，作废旧 Key 才是根治。
+
 ### Fixed
 
 - **缓存键碰撞导致工具返回错误数据**（`CacheManager._get_cache_file_path`）。
