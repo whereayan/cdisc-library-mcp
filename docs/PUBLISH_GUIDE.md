@@ -57,6 +57,11 @@ python scripts/release.py 0.1.5 --upload --repo testpypi
 
 脚本会依次执行：版本一致性 → PyPI 版本未被占用 → 跟踪文件密钥扫描 → pytest → 构建 →
 sdist 内容核对 → 产物密钥扫描 → `twine check` → 上传（`--non-interactive`，优先用
+
+> `--write-version` 会顺带重装 editable（`uv pip install -e .`），因为
+> `importlib.metadata` 读的是已安装的 `.dist-info`，只改 `version.py` 会让
+> `test_reported_version_matches_distribution` 在第一次跑闸门时就红。
+
 `~/.pypirc` 的具名段）任一闸门不过即中止。
 
 ### 闸门清单（手动等价步骤 / 排查用）

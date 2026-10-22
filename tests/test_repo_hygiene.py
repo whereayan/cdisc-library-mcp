@@ -151,6 +151,45 @@ class TestSecretGate:
         assert gate.scan_blob((key_line + "  # allowlist secret").encode(), "x") == [], "标记行应豁免"
 
 
+class TestReleaseEditableRefresh:
+    """--write-version must leave the installed .dist-info in sync.
+
+    The source version and the installed metadata are two different values
+    (version.py vs importlib.metadata), and the test suite asserts they agree.
+    Releasing 0.1.7 hit that as a guaranteed first-run failure.
+    """
+
+    def test_prefers_uv_when_available(self):
+        release = _load_release()
+        assert release.reinstall_editable_cmd("/bin/uv", has_pip=True) == [
+            "/bin/uv", "pip", "install", "-e", ".", "--python", release.sys.executable,
+        ]
+
+    def test_falls_back_to_pip_without_uv(self):
+        release = _load_release()
+        cmd = release.reinstall_editable_cmd(None, has_pip=True)
+        assert cmd == [release.sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps"]
+
+    def test_returns_none_when_neither_installer_exists(self):
+        release = _load_release()
+        assert release.reinstall_editable_cmd(None, has_pip=False) is None
+
+    def test_installed_dist_version_reads_metadata_not_source(self):
+        release = _load_release()
+        import importlib.metadata
+
+        assert release.installed_dist_version() == importlib.metadata.version("cdisc-library-mcp")
+
+    def test_write_version_is_followed_by_refresh(self):
+        """The two must stay adjacent: writing the source version alone breaks the gates."""
+        import re
+
+        source = (ROOT / "scripts" / "release.py").read_text(encoding="utf-8")
+        assert re.search(
+            r"write_version\(version\)\s*\r?\n\s*refresh_editable_install\(version\)", source
+        ), "--write-version 后又只改源码不刷新安装了"
+
+
 class TestReleaseUploadTarget:
     """The upload step must never be able to hang waiting for credentials.
 

@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import re
 import shutil
@@ -27,6 +28,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "src" / "cdisc_mcp" / "version.py"
@@ -54,6 +56,51 @@ def write_version(new_version: str) -> None:
         encoding="utf-8",
     )
     print(f"✔ 版本号写入唯一来源: {new_version}")
+
+
+def installed_dist_version() -> Optional[str]:
+    """Version recorded in the installed .dist-info, or None if not installed.
+
+    This is what the test suite asserts against (importlib.metadata), and it is
+    *not* the same value as src/cdisc_mcp/version.py: bumping the source alone
+    leaves the metadata behind.
+    """
+    from importlib.metadata import PackageNotFoundError, version as dist_version
+
+    try:
+        return dist_version("cdisc-library-mcp")
+    except PackageNotFoundError:
+        return None
+
+
+def reinstall_editable_cmd(uv: Optional[str], has_pip: bool) -> Optional[list[str]]:
+    """Command that refreshes the editable install, or None if impossible."""
+    if uv:
+        return [uv, "pip", "install", "-e", ".", "--python", sys.executable]
+    if has_pip:
+        return [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps"]
+    return None
+
+
+def refresh_editable_install(target: str) -> None:
+    """Reinstall editable so its .dist-info matches version.py.
+
+    Without this, the first gate run after --write-version always fails
+    tests/test_server_wiring.py::test_reported_version_matches_distribution
+    (observed while releasing 0.1.7): the source says the new version, the
+    installed metadata still says the old one.
+    """
+    cmd = reinstall_editable_cmd(shutil.which("uv"), importlib.util.find_spec("pip") is not None)
+    if cmd is None:
+        sys.exit(
+            "✘ 版本号已写入 version.py，但既找不到 uv 也找不到 pip，无法刷新 editable 安装的"
+            f" .dist-info。手动执行一次：uv pip install -e . --python {sys.executable}"
+        )
+    run(cmd)
+    got = installed_dist_version()
+    if got != target:
+        sys.exit(f"✘ 刷新后 .dist-info 仍是 {got}，期望 {target}")
+    print(f"✔ .dist-info 已同步到 {got}")
 
 
 def pypi_has_version(name: str, version: str, repo: str) -> bool:
@@ -179,6 +226,7 @@ def main() -> None:
 
     if args.write_version and version != current_version():
         write_version(version)
+        refresh_editable_install(version)
     if version != current_version():
         sys.exit(f"✘ 目标版本 {version} 与 version.py 的 {current_version()} 不一致（加 --write-version 或改参数）")
 
@@ -191,9 +239,16 @@ def main() -> None:
 
     if cdisc_mcp.__version__ != version:
         sys.exit(f"✘ 已安装的包自报 {cdisc_mcp.__version__}，与目标 {version} 不一致（先重新安装本仓库）")
+    dist_v = installed_dist_version()
+    if dist_v != version:
+        sys.exit(
+            f"✘ .dist-info 记的是 {dist_v or '未安装'}，与目标 {version} 不一致；"
+            f"test_reported_version_matches_distribution 会在这里红。先刷新：uv pip install -e . --python {sys.executable}"
+            "（或用 --write-version，脚本会自己刷）"
+        )
     if pypi_has_version("cdisc-library-mcp", version, args.repo):
         sys.exit(f"✘ {args.repo} 上已存在 {version}：版本号不能复用，请递增")
-    print(f"✔ 包版本自报 {version}；{args.repo} 上尚未占用")
+    print(f"✔ 包版本自报 {version}（与 .dist-info 一致）；{args.repo} 上尚未占用")
 
     # 2) 跟踪文件不得含密钥（历史教训：本地客户端配置曾随 sdist 外泄）
     gate_secret_scan("跟踪文件密钥扫描", ["--tracked"])

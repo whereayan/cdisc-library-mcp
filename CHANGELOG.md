@@ -12,12 +12,22 @@
   （凭据由 twine 自己取，环境变量 `TWINE_*` 仍优先覆盖），否则退回 `--repository-url`；
   两条分支都带 `--non-interactive`，缺凭据立即报错而不是静默挂住。
   `docs/PUBLISH_GUIDE.md` 的手动上传段同步补了该注意事项。
+- **`--write-version` 后第一次跑闸门必红**：写完 `version.py` 就直接 pytest，而
+  `importlib.metadata` 读的是已安装 `.dist-info`（仍停在旧版），于是
+  `test_reported_version_matches_distribution` 失败，要人工重装才能继续（发 0.1.7 时踩过）。
+  现在 `--write-version` 之后紧跟 `refresh_editable_install()`：有 uv 用
+  `uv pip install -e . --python <exe>`，否则退回 `pip install -e . --no-deps`，两者都没有则报出
+  可执行提示后退出。另加一条前置漂移闸门——手工改 `version.py` 而没走 `--write-version` 时，
+  也能在跑测试与联网检查之前就报「.dist-info 与目标版本不一致」。
 
 ### Tests
 
 - `TestReleaseUploadTarget` 4 条：具名段优先、无段时回退 URL（含 testpypi 的 URL）、
   两条分支都不得漏 `--non-interactive`、源码里不得再出现裸 `upload --repository-url`。
   全量 118 -> 122 passed。
+- `TestReleaseEditableRefresh` 5 条：uv 优先 / pip 兜底 / 两者皆无返回 None /
+  `installed_dist_version` 读元数据而非源码 / `write_version` 后必须紧跟 refresh。
+  全量 122 -> 127 passed。
 
 > 注：本节内容**不在**已发布的 0.1.7 产物里（`scripts/release.py` 会进 sdist，
 > 修复要随下一个版本发出）。
