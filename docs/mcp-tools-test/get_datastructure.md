@@ -53,7 +53,7 @@ mcp__cdisc-library__get_datastructure({
       ]
     },
     {
-      "varset": "PopulationIndicator",
+      "varset": "Population Indicator",
       "label": "ADSL Population Indicator",
       "count": 7,
       "variables": [
@@ -65,9 +65,11 @@ mcp__cdisc-library__get_datastructure({
 }
 ```
 
-实测 9 个变量集与计数：Identifier 8、SubjectDemographics 9、PopulationIndicator 7、
-Treatment 18、Dose 3、TreatmentTiming 20、PeriodSubperiodandPhaseTiming 32、
-TrialExperience 35、Stratification 9，合计 141。实测紧凑视图 15,169 字符，
+（`note` 末尾在代码块里做了省略；完整文案另提醒 `xx`/`w`/`y` 是模式占位。）
+
+实测 9 个变量集与计数：Identifier 8、Subject Demographics 9、Population Indicator 7、
+Treatment 18、Dose 3、Treatment Timing 20、"Period, Subperiod, and Phase Timing" 32、
+Trial Experience 35、Stratification 9，合计 141。实测紧凑视图 15,169 字符，
 同一数据结构的原始载荷 171,782 字符（11.3 倍）。
 
 ## 返回字段说明
@@ -76,7 +78,7 @@ TrialExperience 35、Stratification 9，合计 141。实测紧凑视图 15,169 �
 |------|------|
 | `totalVariables` | 模式变量总数（非实际列数，见下） |
 | `variableSetCount` | 非空变量集个数（空集不列入） |
-| `variableSets[].varset` | 变量集 slug，可传给 `get_datastructure_varset` |
+| `variableSets[].varset` | **API 在数据结构载荷里给的变量集名**，带空格与逗号（如 `Subject Demographics`、`Period, Subperiod, and Phase Timing`），**与 `/varsets` 清单的 slug（`SubjectDemographics`）不是同一个字串**。两者都能直接当 `get_datastructure_varset` 的 `varset` 传入（大小写/空格/逗号不敏感，实测已验证） |
 | `variables[].core` | `Req` / `Cond` / `Perm` |
 | `variables[].datatype` | `Char` / `Num` |
 | `note` | 口径提示 |
