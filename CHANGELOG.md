@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8
 
 ### Fixed
 
@@ -29,8 +29,8 @@
   `installed_dist_version` 读元数据而非源码 / `write_version` 后必须紧跟 refresh。
   全量 122 -> 127 passed。
 
-> 注：本节内容**不在**已发布的 0.1.7 产物里（`scripts/release.py` 会进 sdist，
-> 修复要随下一个版本发出）。
+> 注：以上两条只改发布工具链（`scripts/release.py` 随 sdist 分发），**不在** 0.1.7 产物里，
+> 本节随 0.1.8 首次对外发布；包的功能行为与 0.1.7 相同。
 
 ## 0.1.7
 
