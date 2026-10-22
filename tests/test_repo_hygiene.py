@@ -29,6 +29,14 @@ def _load_scanner():
     return module
 
 
+def _load_release():
+    path = ROOT / "scripts" / "release.py"
+    spec = importlib.util.spec_from_file_location("release", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _git_files() -> list[str]:
     try:
         out = subprocess.run(
@@ -141,3 +149,36 @@ class TestSecretGate:
         key_line = '{"CDISC_API_KEY": "' + half + half + '"}'
         assert len(gate.scan_blob(key_line.encode(), "x")) >= 1, "未标记时应命中"
         assert gate.scan_blob((key_line + "  # allowlist secret").encode(), "x") == [], "标记行应豁免"
+
+
+class TestReleaseUploadTarget:
+    """The upload step must never be able to hang waiting for credentials.
+
+    A bare ``--repository-url`` makes twine ignore the named ``~/.pypirc``
+    section and fall back to prompting for a username; with no TTY the process
+    blocks forever. That cost the 0.1.7 release two aborted attempts.
+    """
+
+    def test_named_section_preferred_when_pypirc_has_it(self, monkeypatch):
+        release = _load_release()
+        monkeypatch.setattr(release, "pypirc_has_section", lambda section: True)
+        assert release.upload_target("pypi") == ["--non-interactive", "--repository", "pypi"]
+        assert release.upload_target("testpypi") == ["--non-interactive", "--repository", "testpypi"]
+
+    def test_falls_back_to_url_without_pypirc(self, monkeypatch):
+        release = _load_release()
+        monkeypatch.setattr(release, "pypirc_has_section", lambda section: False)
+        args = release.upload_target("pypi")
+        assert args == ["--non-interactive", "--repository-url", "https://upload.pypi.org/legacy/"]
+        assert "test.pypi.org" in release.upload_target("testpypi")[-1]
+
+    def test_non_interactive_always_present(self, monkeypatch):
+        """Both branches must carry the flag; the hanging lives on the other side of it."""
+        release = _load_release()
+        for has_section in (True, False):
+            monkeypatch.setattr(release, "pypirc_has_section", lambda section, v=has_section: v)
+            assert "--non-interactive" in release.upload_target("pypi")
+
+    def test_upload_invocation_does_not_use_bare_repository_url(self):
+        source = (ROOT / "scripts" / "release.py").read_text(encoding="utf-8")
+        assert 'upload", "--repository-url"' not in source, "上传命令又回到会挂住的裸 URL 形式了"

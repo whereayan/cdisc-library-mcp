@@ -100,6 +100,44 @@ def gate_secret_scan(label: str, extra: list[str]) -> None:
         sys.exit(f"✘ {label}：发现疑似密钥，发布中止（详见上方输出）")
 
 
+def pypirc_section(repo: str) -> str:
+    return "testpypi" if repo == "testpypi" else "pypi"
+
+
+def pypirc_has_section(section: str) -> bool:
+    """True if ~/.pypirc declares `section`. Keys only; values are never read."""
+    import configparser
+
+    pypirc = Path.home() / ".pypirc"
+    if not pypirc.exists():
+        return False
+    cp = configparser.ConfigParser()
+    cp.read(pypirc, encoding="utf-8")
+    return cp.has_section(section)
+
+
+def upload_target(repo: str) -> list[str]:
+    """Point twine at the index without letting it block on a credential prompt.
+
+    A bare ``--repository-url`` makes twine ignore the named ``~/.pypirc``
+    section, so when no credentials were handed to it on the command line twine
+    falls back to prompting for a username -- and with no TTY (CI, an agent
+    harness, a piped shell) that prompt waits forever. The 0.1.7 upload hung
+    exactly like this and had to be replayed by hand. Prefer
+    ``--repository <section>`` whenever the section exists, and always pass
+    ``--non-interactive`` so a credential problem raises instead of hanging.
+    """
+    section = pypirc_section(repo)
+    if pypirc_has_section(section):
+        return ["--non-interactive", "--repository", section]
+    url = (
+        "https://upload.pypi.org/legacy/"
+        if repo == "pypi"
+        else "https://test.pypi.org/legacy/"
+    )
+    return ["--non-interactive", "--repository-url", url]
+
+
 def check_pypirc_credentials(repo: str) -> None:
     """Fail early with a readable message instead of twine's cryptic 403.
 
@@ -117,7 +155,7 @@ def check_pypirc_credentials(repo: str) -> None:
         )
     cp = configparser.ConfigParser()
     cp.read(pypirc, encoding="utf-8")
-    section = "testpypi" if repo == "testpypi" else "pypi"
+    section = pypirc_section(repo)
     password = cp.get(section, "password", fallback="").strip()
     if not password or password.startswith("pypi-<") or "粘贴" in password or "<token>" in password:
         sys.exit(
@@ -211,11 +249,17 @@ def main() -> None:
         env["TWINE_USERNAME"] = "__token__"
         env["TWINE_PASSWORD"] = token
     else:
-        # Let twine fall back to ~/.pypirc / keyring / its own prompt. Do not
-        # paste a token into chat just to satisfy this script.
+        # Let twine fall back to ~/.pypirc / keyring. Do not paste a token into
+        # chat just to satisfy this script.
         print("ℹ 未设 TWINE_PASSWORD/PYPI_TOKEN，改由 twine 从 ~/.pypirc 或 keyring 取凭据")
-    repo_url = "https://upload.pypi.org/legacy/" if args.repo == "pypi" else "https://test.pypi.org/legacy/"
-    run([*tw, "upload", "--repository-url", repo_url, *(str(p) for p in artifacts)], env=env, text=True)
+    target = upload_target(args.repo)
+    named = target[-1] if target[1] == "--repository" else None
+    print(
+        f"ℹ 上传凭据来源: "
+        f"{'~/.pypirc:[' + named + ']' if named else '环境变量 TWINE_USERNAME/TWINE_PASSWORD'}"
+        "（--non-interactive：缺凭据直接报错，不会无 TTY 时静默挂住）"
+    )
+    run([*tw, "upload", *target, *(str(p) for p in artifacts)], env=env, text=True)
     host = "test.pypi.org" if args.repo == "testpypi" else "pypi.org"
     print(f"✔ 已发布: https://{host}/project/cdisc-library-mcp/{version}/")
 

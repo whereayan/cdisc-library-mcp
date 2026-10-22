@@ -56,7 +56,8 @@ python scripts/release.py 0.1.5 --upload --repo testpypi
 ```
 
 脚本会依次执行：版本一致性 → PyPI 版本未被占用 → 跟踪文件密钥扫描 → pytest → 构建 →
-sdist 内容核对 → 产物密钥扫描 → `twine check` → 上传。任一闸门不过即中止。
+sdist 内容核对 → 产物密钥扫描 → `twine check` → 上传（`--non-interactive`，优先用
+`~/.pypirc` 的具名段）任一闸门不过即中止。
 
 ### 闸门清单（手动等价步骤 / 排查用）
 
@@ -69,6 +70,12 @@ python scripts/check_secrets.py dist/*.whl dist/*.tar.gz
 python -m twine check dist/*.whl dist/*.tar.gz   # twine 需 >= 7.0
 twine upload dist/*.whl dist/*.tar.gz
 ```
+
+> ⚠ **手动上传务必带 `--non-interactive`**。只给 `--repository-url <裸URL>` 时 twine 会
+> 忽略 `~/.pypirc` 里的同名段，转而在命令行上问用户名/密码；没有终端（CI、agent
+> harness、管道 shell）时进程会**永远等下去**，表现为“发版很慢”。正确写法：
+> `twine upload --non-interactive --repository pypi dist/*`（凭据缺失会直接报错），
+> 或用环境变量 `TWINE_USERNAME/TWINE_PASSWORD`。`scripts/release.py` 已按此修正。
 
 ### 方式一：发布到 PyPI
 

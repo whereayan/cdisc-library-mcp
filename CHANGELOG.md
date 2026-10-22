@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`scripts/release.py --upload` 会无限挂住**：上传步骤只传 `--repository-url <裸URL>`，
+  twine 因此不按名字去读 `~/.pypirc` 的 `[pypi]` 段，转而要求交互式补用户名/密码；
+  没有终端时（CI、agent harness、管道 shell）它等不到输入也不报错，表现成「发版很慢」。
+  0.1.7 就因此连挂两次（一次手动中止、一次 300s 超时），最后绕过脚本手传才发上去。
+  现在统一走 `upload_target()`：`~/.pypirc` 有同名段就用具名 `--repository <section>`
+  （凭据由 twine 自己取，环境变量 `TWINE_*` 仍优先覆盖），否则退回 `--repository-url`；
+  两条分支都带 `--non-interactive`，缺凭据立即报错而不是静默挂住。
+  `docs/PUBLISH_GUIDE.md` 的手动上传段同步补了该注意事项。
+
+### Tests
+
+- `TestReleaseUploadTarget` 4 条：具名段优先、无段时回退 URL（含 testpypi 的 URL）、
+  两条分支都不得漏 `--non-interactive`、源码里不得再出现裸 `upload --repository-url`。
+  全量 118 -> 122 passed。
+
+> 注：本节内容**不在**已发布的 0.1.7 产物里（`scripts/release.py` 会进 sdist，
+> 修复要随下一个版本发出）。
+
 ## 0.1.7
 
 发布通道回归修复：`uvx cdisc-library-mcp` 实测可用（握手、15 工具、prompts 均通过），
