@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from mcp.server import Server
@@ -19,25 +21,51 @@ from .resources import register_resources
 from .tools import register_tools
 
 
-def _load_env_file() -> None:
-    """Load environment variables from .env file.
+# CDISC keys are always ASCII, so detection reads bytes and never depends on the
+# file's text encoding (a GBK-commented .env must still be recognised).
+CDISC_KEY_LINE = re.compile(rb'^[ \t]*(?:export[ \t]+)?CDISC_[A-Za-z0-9_]+[ \t]*=', re.M)
 
-    Searches for .env file in:
-    1. Current working directory
-    2. Package installation directory
-    3. User home directory (~/.cdisc-mcp/.env)
-    """
-    # 优先级：工作目录 > 包目录 > 用户目录
-    env_paths = [
+
+def _defines_cdisc_settings(path: Path) -> bool:
+    """True if the dotenv file itself declares a ``CDISC_*`` variable."""
+    try:
+        return bool(CDISC_KEY_LINE.search(path.read_bytes()))
+    except OSError:
+        return False
+
+
+def _env_file_candidates() -> list[Path]:
+    """Search order: working directory > project root > user home."""
+    return [
         Path.cwd() / ".env",
         Path(__file__).parent.parent.parent / ".env",  # 项目根目录
         Path.home() / ".cdisc-mcp" / ".env",
     ]
 
-    for env_path in env_paths:
-        if env_path.exists():
-            load_dotenv(env_path)
-            break
+
+def _pick_env_file(candidates: Optional[list[Path]] = None) -> Optional[Path]:
+    """First candidate that actually owns CDISC config.
+
+    The working directory is where the MCP client launched this server, so it
+    usually holds an unrelated project ``.env``. Treating any existing file as a
+    hit stops the search there and ``~/.cdisc-mcp/.env`` is never reached, which
+    surfaces as a mysterious "not authenticated" server. Skip files that declare
+    no ``CDISC_*`` variable, and never import their keys.
+    """
+    for env_path in _env_file_candidates() if candidates is None else candidates:
+        try:
+            if env_path.is_file() and _defines_cdisc_settings(env_path):
+                return env_path
+        except OSError:
+            continue  # unreadable candidate: keep searching rather than fail startup
+    return None
+
+
+def _load_env_file() -> None:
+    """Load environment variables from the .env file that owns CDISC config."""
+    env_path = _pick_env_file()
+    if env_path is not None:
+        load_dotenv(env_path)
 
 
 class CDISCMCPServer:

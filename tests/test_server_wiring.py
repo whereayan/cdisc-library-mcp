@@ -3,11 +3,15 @@
 These guard the registration layer, which the pure-unit tests never touched:
 - 0.1.4 shipped `register_prompts` but never called it, so the prompts advertised
   in the README were not reachable over MCP.
+- 0.1.6 shipped `resources/read` broken: the handler compared the injected
+  pydantic `AnyUrl` to a string literal and returned a `TextContent`, so every
+  read failed even though `resources/list` passed. Only listing was asserted.
 - mcp 2.x removed the `@server.list_resources()` decorator API, so an unpinned
   dependency silently produces a server that dies at startup.
 """
 
 import importlib.metadata
+import json
 
 import pytest
 from mcp import types
@@ -39,6 +43,22 @@ class TestRegistration:
         assert types.ListToolsRequest in handlers
         assert types.ListResourcesRequest in handlers
         assert types.ListPromptsRequest in handlers, "prompts advertised but never registered"
+
+    async def test_resources_single_source_of_truth(self, server, monkeypatch):
+        """`resources/list` must advertise exactly what `resources/read` serves."""
+        from cdisc_mcp.resources.products import RESOURCES
+
+        async def fake_products():
+            return {"_links": {"item": [{"href": "/x", "title": "sdtmig"}]}}
+
+        async def fake_about():
+            return {"_links": {"self": {"href": "/y"}}}
+
+        monkeypatch.setattr(server.client, "get_products", fake_products)
+        monkeypatch.setattr(server.client, "get_about", fake_about)
+        await server.setup()
+        listed = await _request(server, types.ListResourcesRequest(method="resources/list"))
+        assert {str(r.uri) for r in listed.resources} == set(RESOURCES)
 
     async def test_all_fifteen_tools_reachable(self, server):
         await server.setup()
@@ -83,6 +103,89 @@ class TestPromptRendering:
         with pytest.raises(McpError) as exc:
             await _request(server, req)
         assert "dataset" in str(exc.value.error)
+
+
+class TestResourceRead:
+    """`resources/list` passing says nothing about `resources/read` being reachable."""
+
+    @staticmethod
+    def _stub_client(server, monkeypatch):
+        async def fake_products():
+            return {"products": [{"name": "sdtmig"}]}
+
+        async def fake_about():
+            return {"title": "CDISC Library API", "version": "v1"}
+
+        monkeypatch.setattr(server.client, "get_products", fake_products)
+        monkeypatch.setattr(server.client, "get_about", fake_about)
+
+    async def test_reads_uri_declared_by_list(self, server, monkeypatch):
+        self._stub_client(server, monkeypatch)
+        await server.setup()
+        listed = await _request(server, types.ListResourcesRequest(method="resources/list"))
+        assert listed.resources, "no resources advertised"
+
+        for resource in listed.resources:
+            res = await _request(
+                server,
+                types.ReadResourceRequest(
+                    method="resources/read",
+                    params=types.ReadResourceRequestParams(uri=str(resource.uri)),
+                ),
+            )
+            assert len(res.contents) == 1, str(resource.uri)
+            content = res.contents[0]
+            assert content.mimeType == "application/json", str(resource.uri)
+            # The payload must be valid JSON, not an error string.
+            json.loads(content.text)
+
+    async def test_read_products_returns_stubbed_payload(self, server, monkeypatch):
+        self._stub_client(server, monkeypatch)
+        await server.setup()
+        res = await _request(
+            server,
+            types.ReadResourceRequest(
+                method="resources/read",
+                params=types.ReadResourceRequestParams(uri="cdisc://products"),
+            ),
+        )
+        assert json.loads(res.contents[0].text) == {"products": [{"name": "sdtmig"}]}
+
+    async def test_read_payload_is_slimmed_like_tools(self, server, monkeypatch):
+        """Resources take no `raw` argument, so the agent-facing form is all they serve."""
+
+        async def fake_products():
+            return {"_links": {"item": [{"href": "/mdr/sdtmig/3-4", "title": "SDTMIG 3-4"}]}}
+
+        monkeypatch.setattr(server.client, "get_products", fake_products)
+        await server.setup()
+        res = await _request(
+            server,
+            types.ReadResourceRequest(
+                method="resources/read",
+                params=types.ReadResourceRequestParams(uri="cdisc://products"),
+            ),
+        )
+        payload = json.loads(res.contents[0].text)
+        assert "_links" not in payload
+        assert payload["refs"] == {"SDTMIG 3-4": "/mdr/sdtmig/3-4"}
+
+    async def test_unknown_resource_is_rejected(self, server, monkeypatch):
+        self._stub_client(server, monkeypatch)
+        await server.setup()
+        res = await _request(server, types.ListResourcesRequest(method="resources/list"))
+        known = {str(r.uri) for r in res.resources}
+        req = types.ReadResourceRequest(
+            method="resources/read",
+            params=types.ReadResourceRequestParams(uri="cdisc://not-a-resource"),
+        )
+        # A JSON-RPC Invalid Params error, matching how unknown prompts report.
+        with pytest.raises(McpError) as exc:
+            await _request(server, req)
+        assert exc.value.error.code == -32602
+        assert "cdisc://not-a-resource" in exc.value.error.message
+        assert "cdisc://products" in exc.value.error.message, "must list what it does serve"
+        assert "cdisc://not-a-resource" not in known
 
 
 class TestVersionConsistency:

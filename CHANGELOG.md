@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.1.7
+
+发布通道回归修复：`uvx cdisc-library-mcp` 实测可用（握手、15 工具、prompts 均通过），
+但 `resources/read` 从未工作过，且 `.env` 查找会被客户端项目目录里的无关文件抢占。
+
+### Fixed
+
+- **`resources/read` 全部失败**：`read_product_resource` 把注入的 pydantic `AnyUrl`
+  与字符串字面量直接比较（`AnyUrl("cdisc://about") == "cdisc://about"` 为 False），
+  因此任何 uri 都落到 `Unknown resource` 分支；即使绕过该比较，返回 `TextContent`
+  也会被 v1 包装器的返回类型匹配拒绝（且 `TextContent` 缺必填 `type`，构造即
+  ValidationError）。现按 `str(uri)` 比较，并返回 `Iterable[ReadResourceContents]`。
+  旧版 102 个测试只断言了 `resources/list` 注册，读路径无用例，所以缺陷随 0.1.5/0.1.6
+  两次发布存活；本次补齐 `TestResourceRead` 三条用例（含遍历 `list` 声明的每个 uri）。
+- **无关 `.env` 遮蔽凭据文件**：stdio 启动时工作目录是 MCP 客户端的项目目录，
+  旧逻辑「第一个存在的 `.env` 即命中并 break」，于是客户端项目里一个与本服务无关的
+  `.env` 会挡住 `~/.cdisc-mcp/.env`，表现为服务无凭据启动。现在只把**自身声明了
+  `CDISC_*` 变量**的文件当作命中，其余跳过且不导入其键值；不可读的文件跳过而非
+  中断启动。新增 `tests/test_env_discovery.py`。
+
+### Changed
+
+- **`resources/read` 与工具同一响应形态**：资源载荷现在过 `slim()`（剥 `_links`、
+  链接折叠为 `refs`）。资源不接受参数，没有 `raw` 逃生舱，所以只服务 agent 友好形态。
+- **未知资源 uri 改为协议级 Invalid Params**：旧版抛裸 `ValueError`，客户端拿到
+  `code=0` 的 JSON-RPC 错误；现在按 `McpError(-32602)` 上报并在文案里列出可用资源，
+  与未知 prompt 的报告方式一致。
+- **资源清单单一来源**：`RESOURCES`（uri -> 名称/描述/取数）同时驱动 `resources/list`
+  与 `resources/read`，两者不可能再漂移。
+
+### Docs
+
+- README 明确 `uvx` 无需再加 `--with "mcp<2.0.0"`（上界已写进 `pyproject.toml`，
+  uv 解析时自动遵守，实测解析到 mcp 1.30.0），并把示例配置的内联密钥改为推荐
+  `~/.cdisc-mcp/.env`；补充 `.env` 查找顺序说明。
+
 ## 0.1.6
 
 针对工具设计问题的集中修复：目标是让 LLM 调用方少试错、省 token、不撞客户端超时。

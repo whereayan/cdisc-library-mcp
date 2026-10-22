@@ -18,7 +18,7 @@ MCP Server for CDISC Library API - 提供对临床数据标准的完整访问。
 
 ### 方式一：uvx（推荐，自动安装）
 
-无需手动安装，MCP 客户端会自动下载：
+无需手动安装，MCP 客户端会自动下载（依赖里已声明 `mcp>=1.6.0,<2.0.0`，`uvx` 会自动遵守该上界，**不需要**再手工加 `--with "mcp<2.0.0"`）：
 
 ```json
 {
@@ -26,13 +26,19 @@ MCP Server for CDISC Library API - 提供对临床数据标准的完整访问。
     "cdisc-library": {
       "command": "uvx",
       "args": ["cdisc-library-mcp"],
-      "env": {
-        "CDISC_API_KEY": "your-api-key-here"
-      }
+      "env": {}
     }
   }
 }
 ```
+
+凭据推荐放在 `~/.cdisc-mcp/.env`（不要写进客户端配置）：
+
+```ini
+CDISC_API_KEY=your-api-key-here
+```
+
+如果必须内联，也可以把 `"env": {}` 换成 `{"CDISC_API_KEY": "your-api-key-here"}`。
 
 ### 方式二：pip 安装
 
@@ -132,6 +138,16 @@ CDISC Library API 使用 `-` 分隔版本号：
 | `CDISC_BASE_URL` | ❌ | `https://library.cdisc.org/api` | API URL |
 | `CDISC_CACHE_DIR` | ❌ | `~/.cdisc-mcp/cache` | 缓存目录 |
 | `CDISC_CACHE_TTL` | ❌ | `86400` | 缓存时间（秒） |
+
+### `.env` 查找顺序
+
+按以下顺序取**第一个自身声明了 `CDISC_*` 变量**的文件；只声明了别的项目变量的 `.env` 会被跳过（不会导入其键值）：
+
+1. 当前工作目录 `./.env` —— stdio 启动时这是 MCP 客户端的项目目录，通常与本服务无关
+2. 项目根目录 `.env`（源码安装 / `pip install -e` 场景）
+3. `~/.cdisc-mcp/.env`（推荐落点，与 uvx / pip 安装方式无关）
+
+三个都没命中时，退回真实环境变量（例如客户端注入的 `env`）；都没有则启动时打印未认证警告。
 
 ## 开发
 
