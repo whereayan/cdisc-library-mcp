@@ -8,12 +8,16 @@ from ..client import CDISCClient
 from ..utils.slim import slim
 from .standard import STANDARD_TOOLS
 from .dataset import DATASET_TOOLS
+from .datastructure import DATASTRUCTURE_TOOLS
 from .codelist import CODELIST_TOOLS
 from .search import SEARCH_TOOLS
 
 
 # 合并所有工具定义
-ALL_TOOLS = STANDARD_TOOLS + DATASET_TOOLS + CODELIST_TOOLS + SEARCH_TOOLS
+ALL_TOOLS = (
+    STANDARD_TOOLS + DATASET_TOOLS + DATASTRUCTURE_TOOLS
+    + CODELIST_TOOLS + SEARCH_TOOLS
+)
 
 
 async def register_tools(server: Server, client: CDISCClient) -> None:
@@ -65,6 +69,35 @@ async def _execute_tool(
     elif name == "get_variable":
         return await client.get_variable(
             args["standard"], args["version"], args["dataset"], args["variable"]
+        )
+
+    # ADaM data structure tools (raw is honoured inside the client because these
+    # endpoints need shaping, not just link stripping)
+    elif name == "get_datastructures":
+        return await client.get_datastructures(
+            args["standard"], args["version"], raw=raw
+        )
+    elif name == "get_datastructure":
+        return await client.get_datastructure(
+            args["standard"], args["version"], args["datastructure"], raw=raw
+        )
+    elif name == "get_datastructure_variables":
+        return await client.get_datastructure_variables(
+            args["standard"], args["version"], args["datastructure"], raw=raw
+        )
+    elif name == "get_datastructure_variable":
+        return await client.get_datastructure_variable(
+            args["standard"], args["version"], args["datastructure"],
+            args["variable"],
+        )
+    elif name == "get_datastructure_varsets":
+        return await client.get_datastructure_varsets(
+            args["standard"], args["version"], args["datastructure"], raw=raw
+        )
+    elif name == "get_datastructure_varset":
+        return await client.get_datastructure_varset(
+            args["standard"], args["version"], args["datastructure"],
+            args["varset"], raw=raw
         )
 
     # Controlled terminology tools

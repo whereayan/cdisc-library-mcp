@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.1.9
+
+### Added
+
+- **ADaM 数据结构工具组（15 -> 21 个工具）**：CDISC Library 把 ADaM/ADaMIG 的元数据
+  挂在 `/mdr/adam/{product}/datastructures`，而本服务只实现了 `/datasets` 路径，
+  结果是 **ADaM 侧全部元数据查询在 0.1.8 之前都不可用**。实测（2026-10-22，v1.3）：
+  `get_dataset_variables(adamig, 1-3, ADSL)` / `get_dataset` / `get_datasets` /
+  `get_variable(adamig, 1-3, ADSL, AGE)` 均为 404，同一工具换成 sdtmig/DM 则正常，
+  说明不是凭据或网络问题而是路径未实现。现按 API 文档的六个端点逐一落地：
+  `get_datastructures`、`get_datastructure`、`get_datastructure_variables`、
+  `get_datastructure_variable`、`get_datastructure_varsets`、`get_datastructure_varset`
+  （`client.py` 新增同名方法 + `tools/datastructure.py`）。
+  另外一个发现：**`search` 不能用来穷举 ADaM 变量**——`search(query='ADSL',
+  type='Analysis Variable')` 只返 31 条且 v1.0/1.1/1.2/1.3 混排，因为它按文本相关度
+  匹配，而大多数 ADSL 变量的 label/description 并不包含“ADSL”字样；ADSL 实际有
+  141 个（模式）变量。这种“返回了但残缺”比 404 危险，已在工具描述里写明分工。
+- **变量名/结构名/变量集名的大小写安全还原**：API 路径区分大小写，而 ADaM 的模式变量
+  故意混写（`SITEGRy`、`APHASEw`、`TRxxPGy`、`STRATwR`），直接 `upper()` 就 404。
+  现在从对应清单解析准确末段（`_index_records` + 归一化比对），入参大小写/空格/
+  连字符不敏感；变量集还同时接受 slug 与显示名（`Identifier` / `ADSL Identifier` /
+  `subject demographics`），因为集名跟 slug 跨版本不稳定。无法匹配时列出可用名称与
+  相近候选，**且不发出无效请求**。
+- **`get_standard` 不再是取 ADaM 变量的唯一出路**：0.1.8 要回答“ADSL 有哪些变量”
+  只能拉整本 ADaMIG（实测瘦身完成后仍 353,083 字符，含 3 个数据结构）再在外面自己解析；
+  现在 `get_datastructure(standard='adamig', version='latest', datastructure='ADSL')`
+  一次请求、15,169 字符拿到同样的 141 变量与 core/类型。
+
+### Changed
+
+- **ADaM 上调 dataset 工具改为本地报错并指名工具**：`get_datasets`/`get_dataset`/
+  `get_dataset_variables`/`get_variable` 对 `adam`/`adamig` 不再转发一个必然 404 的
+  请求，而是报错列出死 URL、说清“ADaM 元数据在 datastructures 下”并给出可直接
+  执行的替代调用；四个工具的 `description` 同步限定适用标准。SDTM/SEND/CDASH
+  路径行为不变（有用例守住）。
+- **响应尺寸收敛（均有 `raw=true` 逃生舱）**：`get_datastructure` 默认紧凑表（
+  171,782 -> 15,169 字符）；清单类工具把逐行重复的 href 换成一个 `hrefTemplate`
+  （23,048 -> 13,264）并去掉 141 行都相同的 `type`；变量集详情反而保留全量
+  `description`（单集小，9,949 -> 2,431 来的是去掉每变量重复的 `_links`）。
+  空变量集不列入；计数同时给 `totalVariables` 与每集 `count`，并在 `note` 里说明
+  `xx`/`w`/`y` 是模式占位而非实际列名。
+- **prompt 模板与工具签名同步**：`explore_standard`/`find_variable`/`validate_dataset`
+  原本只教 `get_classes`/`get_datasets`/`get_dataset_variables`，在 ADaM 上会直接
+  带出无效调用；现补上 datastructure 工具签名与适用条件。
+
+### Tests
+
+- 新增 `tests/test_adam_datastructures.py` 35 条：URL 形状、六个方法的默认紧凑输出
+  与 `raw` 透传、`latest` 解析、缓存命中不重复请求、大小写还原（`sitegry` ->
+  `SITEGRy` 且不得出现 `SITEGRY`）、slug/显示名四拼法命中同集且只请一次、
+  未知结构/变量/变量集名时列出可用项且不发出无效请求、ADaM 根模型空清单的
+  404 文案（并守住不要出现 `🧭 📄` 双 emoji 堆叠）、四个 dataset 工具的守卫
+  （`asked == []`）、sdtmig 仍走 `/datasets` 的回归、六个工具的注册与参数转发。
+  `route()` 故意让未登记的 URL 直接失败，避免 mock 漏配时变成难读的断言失败。
+- `tests/test_server_wiring.py`：工具数 15 -> 21（并改名），`standard` enum 出现次数
+  7 -> 13。`tests/test_cache_key_collisions.py`：补入六类 `datastructures/*` 键形状
+  （含混合大小写的 `SITEGRy` 与变量集 slug）。
+- 全量 127 -> 162 passed。
+
+### Known issues（本次未修，已实测存在）
+
+- `search` 服务端每 query 只返首页 100 条，客户端 `offset` 只能在这 100 条内滑动：
+  `offset>100` 返 0 条但 `hasMore` 仍为 `true`（误导继续翻页）；缓存 key 为
+  `search/{query}`，不含 type，所以首页截断结果会被缓存 24h 再复用。
+- `get_standard` 无按数据结构过滤的参数，对 ADaMIG 一次返整本（约 353 KB）。
+  新增的工具已覆盖常见需求，但该工具本身仍是个 token 陷阱。
+
 ## 0.1.8
 
 ### Fixed

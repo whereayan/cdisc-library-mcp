@@ -8,7 +8,7 @@ MCP Server for CDISC Library API - 提供对临床数据标准的完整访问。
 
 ## 功能特性
 
-- 🔧 **15 个 MCP Tools** - 覆盖 SDTM, ADaM, CDASH, CT 等标准
+- 🔧 **21 个 MCP Tools** - 覆盖 SDTM, ADaM, CDASH, CT 等标准
 - 📦 **MCP Resources** - 产品列表、API 信息
 - 💬 **MCP Prompts** - 引导式标准探索
 - 🗄️ **持久化缓存** - 减少 API 调用，加速访问
@@ -96,10 +96,23 @@ pip install cdisc-library-mcp
 ### 数据集操作
 | 工具 | 描述 |
 |------|------|
-| `get_datasets` | 获取数据集列表 |
+| `get_datasets` | 获取数据集列表（仅 SDTM/SEND/CDASH；ADaM 用 `get_datastructures`） |
 | `get_dataset` | 获取数据集元数据（描述、所属类等） |
 | `get_dataset_variables` | 获取数据集的完整变量列表（查变量首选） |
 | `get_variable` | 获取变量详情 |
+
+### ADaM 数据结构（0.1.9+）
+ADaM / ADaMIG 的元数据挂在 `/datastructures` 下，没有 `datasets` 端点；
+变量集名与变量名（如 `SITEGRy`）跨版本不稳定且区分大小写，工具会自动解析。
+
+| 工具 | 描述 |
+|------|------|
+| `get_datastructures` | 获取 ADaM 产品的分析数据结构清单（ADSL/BDS/TTE） |
+| `get_datastructure` | 获取单个数据结构的完整变量表（含 core 与类型，紧凑视图） |
+| `get_datastructure_variables` | 获取数据结构的变量名清单（最省 token） |
+| `get_datastructure_variable` | 获取数据结构中单个变量详情 |
+| `get_datastructure_varsets` | 获取数据结构的变量集清单 |
+| `get_datastructure_varset` | 获取单个变量集（含变量 description） |
 
 ### 控制术语
 | 工具 | 描述 |

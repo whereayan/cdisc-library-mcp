@@ -60,10 +60,10 @@ class TestRegistration:
         listed = await _request(server, types.ListResourcesRequest(method="resources/list"))
         assert {str(r.uri) for r in listed.resources} == set(RESOURCES)
 
-    async def test_all_fifteen_tools_reachable(self, server):
+    async def test_all_twenty_one_tools_reachable(self, server):
         await server.setup()
         res = await _request(server, types.ListToolsRequest(method="tools/list"))
-        assert len(res.tools) == 15, sorted(t.name for t in res.tools)
+        assert len(res.tools) == 21, sorted(t.name for t in res.tools)
 
     async def test_prompts_listed(self, server):
         await server.setup()
@@ -224,8 +224,9 @@ class TestToolSchemas:
                 assert props["standard"].get("enum") == STANDARDS, t.name
                 seen += 1
         # standard appears on: get_standard, get_classes, get_datasets,
-        # get_dataset, get_dataset_variables, get_variable, compare_versions
-        assert seen == 7, seen
+        # get_dataset, get_dataset_variables, get_variable, compare_versions,
+        # and the six ADaM data-structure tools
+        assert seen == 13, seen
 
     async def test_every_tool_exposes_raw_escape_hatch(self, server):
         for t in await self._tools(server):

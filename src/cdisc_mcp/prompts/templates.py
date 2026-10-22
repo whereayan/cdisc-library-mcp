@@ -11,17 +11,24 @@ PROMPT_TEMPLATES = {
 
 步骤：
 1. 首先使用 get_standard 获取 {standard} 的基本信息
-2. 使用 get_classes 或 get_datasets 获取可用类/数据集
+2. 使用 get_classes 或 get_datasets 获取可用类/数据集；
+   standard 为 adam / adamig 时没有 datasets 端点，改用 get_datastructures
 3. 根据用户兴趣深入探索具体内容
 
 可用的工具：
 - get_products() - 获取所有产品列表
 - get_standard(standard, version) - 获取标准信息
 - get_classes(standard, version) - 获取类列表
-- get_datasets(standard, version) - 获取数据集列表
+- get_datasets(standard, version) - 获取数据集列表（仅 SDTM/SEND/CDASH）
 - get_dataset(standard, version, dataset) - 获取数据集元数据
 - get_dataset_variables(standard, version, dataset) - 获取数据集的完整变量列表
 - get_variable(standard, version, dataset, variable) - 获取变量详情
+- get_datastructures(standard, version) - ADaM：获取数据结构清单（ADSL/BDS/TTE）
+- get_datastructure(standard, version, datastructure) - ADaM：完整变量表（含 core 与类型）
+- get_datastructure_variables(standard, version, datastructure) - ADaM：变量名清单
+- get_datastructure_variable(standard, version, datastructure, variable) - ADaM：单变量详情
+- get_datastructure_varsets(standard, version, datastructure) - ADaM：变量集清单
+- get_datastructure_varset(standard, version, datastructure, varset) - ADaM：单变量集详情
 
 参数说明：
 - standard: {standard}
@@ -40,6 +47,7 @@ PROMPT_TEMPLATES = {
 可用的工具：
 - search(query, type?, limit?, offset?) - 全局搜索
 - get_variable(standard, version, dataset, variable) - 获取变量详情（version 可传 'latest'）
+- get_datastructure_variable(standard, version, datastructure, variable) - ADaM 变量详情
 """,
 
     "find_terminology": """帮助用户查找与 "{keyword}" 相关的控制术语。
@@ -79,6 +87,7 @@ PROMPT_TEMPLATES = {
 
 步骤：
 1. 使用 get_dataset_variables 获取标准变量定义
+   （standard 为 adam / adamig 时改用 get_datastructure，它给出含 core 的整表）
 2. 检查必需变量列表（Core = Req/Exp）
 3. 验证变量属性是否符合要求
 
@@ -90,5 +99,7 @@ PROMPT_TEMPLATES = {
 - get_dataset(standard, version, dataset) - 获取数据集元数据
 - get_dataset_variables(standard, version, dataset) - 获取变量列表
 - get_variable(standard, version, dataset, variable) - 获取单变量详情
+- get_datastructure(standard, version, datastructure) - ADaM 整表（name/label/core/datatype）
+- get_datastructure_varset(standard, version, datastructure, varset) - ADaM 变量集详情（含 description）
 """,
 }

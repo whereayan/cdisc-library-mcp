@@ -8,6 +8,8 @@ DATASET_TOOLS = [
         "get_datasets",
         description=(
             "获取指定标准下的所有数据集列表。\n\n"
+            "仅适用于 SDTM/SEND/CDASH 系列；adam / adamig 没有 datasets 端点，"
+            "请改用 get_datastructures。\n\n"
             "示例: standard='sdtmig', version='3-4'"
         ),
         properties={
@@ -22,7 +24,8 @@ DATASET_TOOLS = [
         description=(
             "获取指定数据集的元数据：描述、所属类、结构说明、用途等。\n"
             "只查变量清单请用 get_dataset_variables（更省 token）；"
-            "查单个变量详情用 get_variable。\n\n"
+            "查单个变量详情用 get_variable。\n"
+            "仅适用于 SDTM/SEND/CDASH 系列；ADaM 的数据结构用 get_datastructure。\n\n"
             "示例: standard='sdtmig', version='3-4', dataset='DM'"
         ),
         properties={
@@ -40,7 +43,9 @@ DATASET_TOOLS = [
         "get_dataset_variables",
         description=(
             "获取指定数据集的完整变量列表（名称、标签、核心属性 Req/Exp/Perm、角色等）。\n"
-            "这是拿一个域全部变量定义的首选工具；数据集本身的元数据用 get_dataset。\n\n"
+            "这是拿一个域全部变量定义的首选工具；数据集本身的元数据用 get_dataset。\n"
+            "仅适用于 SDTM/SEND/CDASH 系列；查 ADaM（如 ADSL）的变量请改用 "
+            "get_datastructure（含 core 与类型的整表）或 get_datastructure_variables（名称清单）。\n\n"
             "示例: standard='sdtmig', version='3-4', dataset='DM'"
         ),
         properties={
@@ -58,7 +63,8 @@ DATASET_TOOLS = [
         "get_variable",
         description=(
             "获取指定变量的详细信息：数据类型、核心属性(Req/Exp/Perm)、角色、"
-            "关联的 CT codelist 引用（在 refs 中）等。\n\n"
+            "关联的 CT codelist 引用（在 refs 中）等。\n"
+            "仅适用于 SDTM/SEND/CDASH 系列；ADaM 变量用 get_datastructure_variable。\n\n"
             "示例: standard='sdtmig', version='3-4', dataset='DM', variable='USUBJID'"
         ),
         properties={

@@ -31,6 +31,192 @@ _DIFF_TIMEOUT = 45.0
 # Sentinel version alias resolved against the product list.
 _LATEST = "latest"
 
+# The ADaM family publishes its metadata as *analysis data structures*, never as
+# datasets: `/mdr/adam/adamig-1-3/datasets` and `/datasets/ADSL/variables/AGE`
+# are 404 for every version, while `/mdr/adam/adamig-1-3/datastructures/ADSL`
+# and `.../ADSL/variables/AGE` resolve (verified against the live API). Routing
+# an ADaM dataset query at the datasets path therefore cannot ever succeed.
+ADAM_STANDARDS = ("adam", "adamig")
+
+
+def _norm(text: Any) -> str:
+    """Aggressive key for matching names that differ only in case/punctuation.
+
+    ``'Period, Subperiod and Phase Timing'`` and ``'PeriodSubperiodandPhaseTiming'``
+    must land on the same value, and API href tails are case-sensitive
+    (``SITEGRy``, ``APHASEw``, ``TRTxxP``), so lookups cannot simply upper-case.
+    """
+    return re.sub(r"[^a-z0-9]", "", str(text).casefold())
+
+
+def _index_records(
+    records: list[dict[str, Any]],
+    strip_prefix: Optional[str] = None,
+) -> dict[str, str]:
+    """Map normalised names *and* display labels -> the exact API name.
+
+    ``records`` come from :func:`flatten_link_list` (``{name, label, href}``).
+    Both spellings are indexed because href tails are case-sensitive and display
+    labels carry wording the tail has not (slug ``SubjectDemographics`` vs label
+    ``ADSL Subject Demographics``). With ``strip_prefix`` (e.g. ``'ADSL'``) the
+    label is also indexed without that prefix, so a caller can paste either form.
+    """
+    index: dict[str, str] = {}
+    prefix = _norm(strip_prefix) if strip_prefix else ""
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        exact = record.get("name")
+        if not exact:
+            continue
+        index.setdefault(_norm(exact), exact)
+        label = record.get("label")
+        if isinstance(label, str) and label.strip():
+            index.setdefault(_norm(label), exact)
+            folded = _norm(label)
+            if prefix and folded.startswith(prefix):
+                remainder = folded[len(prefix):]
+                if remainder:
+                    index.setdefault(remainder, exact)
+    return index
+
+
+def flatten_datastructure_variables(payload: dict[str, Any]) -> dict[str, Any]:
+    """Reduce an ADaM datastructure payload to one compact row per variable.
+
+    ``/datastructures/ADSL`` is the only endpoint carrying ``core`` and
+    ``simpleDatatype`` (the ``/variables`` list gives hrefs and titles only), so
+    it is the right source for "which variables does ADSL have" — but handed back
+    untouched it buries the caller in the whole hypermedia tree. This keeps the
+    structure metadata plus name/label/core/datatype per variable and drops
+    descriptions and links; ``raw=true`` still returns the original payload.
+
+    Variable-set payloads (``/varsets/Identifier``) inline their variables at the
+    top level instead of nesting them, and they are small enough to describe in
+    full, so their ``description`` is preserved.
+    """
+    sets = []
+    total = 0
+    nested = payload.get("analysisVariableSets")
+    if nested:
+        for vset in nested:
+            rows = [
+                {
+                    "name": var.get("name"),
+                    "label": var.get("label"),
+                    "core": var.get("core"),
+                    "datatype": var.get("simpleDatatype"),
+                }
+                for var in (vset.get("analysisVariables") or [])
+            ]
+            total += len(rows)
+            if rows:
+                sets.append({
+                    "varset": vset.get("name"),
+                    "label": vset.get("label"),
+                    "count": len(rows),
+                    "variables": rows,
+                })
+        summary = {
+            "datastructure": payload.get("name"),
+            "label": payload.get("label"),
+            "description": payload.get("description"),
+            "class": payload.get("class"),
+            "totalVariables": total,
+            "variableSetCount": len(sets),
+            "variableSets": sets,
+        }
+        hint = (
+            "core: Req=Required, Cond=Conditionally Required, Perm=Permissible. "
+            "名称里的 xx/w/y 是模式占位（周期/分层/分组），不是实际变量名。"
+            "本视图省略每个变量的 description：要它请用 get_datastructure_varset 下钻，"
+            "或在本工具传 raw=true 拿完整载荷"
+        )
+    else:
+        # A single variable set: small enough to describe in full, so each row
+        # keeps its description; only the per-variable link blocks are dropped.
+        rows = [
+            {
+                "name": var.get("name"),
+                "label": var.get("label"),
+                "core": var.get("core"),
+                "datatype": var.get("simpleDatatype"),
+                "description": var.get("description"),
+            }
+            for var in (payload.get("analysisVariables") or [])
+        ]
+        total = len(rows)
+        summary = {
+            "varset": payload.get("name"),
+            "label": payload.get("label"),
+            "datastructure": _href_parent(payload),
+            "count": total,
+            "variables": rows,
+        }
+        hint = (
+            "变量集级视图（含 description）。core: Req=Required, "
+            "Cond=Conditionally Required, Perm=Permissible"
+        )
+
+    summary["note"] = hint
+    return summary
+
+
+def _href_parent(payload: dict[str, Any]) -> Optional[str]:
+    """Data structure name inferred from a payload's own self href, if present."""
+    href = str(((payload.get("_links") or {}).get("self") or {}).get("href", ""))
+    parts = [p for p in href.split("/") if p]
+    try:
+        return parts[parts.index("datastructures") + 1]
+    except ValueError:
+        return None
+
+
+def flatten_link_list(
+    payload: dict[str, Any],
+    link_key: str,
+    *,
+    name_field: str,
+    extra_fields: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Turn one ``_links`` list into explicit records, keeping exact href tails.
+
+    The generic ``slim()`` folds link blocks into a ``{label: href}`` map, which
+    loses the exact case of API href tails (``SITEGRy`` vs ``sitegry``) and lets a
+    duplicated display title rename an entry. List endpoints are therefore parsed
+    here into ``{name, label}`` records, with the product metadata the payload
+    carries alongside.
+
+    Each item's href is dropped and replaced by one ``hrefTemplate``: repeating
+    ``/mdr/adam/adamig-1-3/datastructures/ADSL/variables/`` 141 times costs more
+    than the whole rest of the payload.
+    """
+    records = []
+    for item in (payload.get("_links") or {}).get(link_key) or []:
+        if not isinstance(item, dict):
+            continue
+        href = str(item.get("href", "")).rstrip("/")
+        record = {
+            "name": href.split("/")[-1] if href else None,
+            "label": item.get("title") or item.get("linkName"),
+        }
+        for field in extra_fields:
+            record[field] = item.get(field)
+        records.append(record)
+    out = {name_field: records, "count": len(records)}
+    self_href = str(((payload.get("_links") or {}).get("self") or {}).get("href", ""))
+    if records and self_href:
+        out["hrefTemplate"] = f"{self_href}/{{name}}"
+    product = {
+        field: payload[field]
+        for field in ("name", "label", "version", "effectiveDate",
+                      "registrationStatus", "description", "class")
+        if payload.get(field) is not None
+    }
+    if product:
+        out["product"] = product
+    return out
+
 
 def _version_tuple(version: str) -> Optional[tuple[int, ...]]:
     """Parse a purely numeric dashed version ('3-4') into a sortable tuple.
@@ -449,6 +635,9 @@ class CDISCClient:
             Dict with datasets list
         """
         version = await self._resolve_version(standard, version)
+        self._reject_adam_datasets_path(
+            standard, version, "get_datasets", "get_datastructures"
+        )
         cache_key = f"datasets/{standard}/{version}"
         cached = self.cache.get(cache_key)
         if cached:
@@ -476,6 +665,9 @@ class CDISCClient:
             Dict with dataset details
         """
         version = await self._resolve_version(standard, version)
+        self._reject_adam_datasets_path(
+            standard, version, "get_dataset", "get_datastructure"
+        )
         cache_key = f"datasets/{standard}/{version}/{dataset}"
         cached = self.cache.get(cache_key)
         if cached:
@@ -503,6 +695,9 @@ class CDISCClient:
             Dict with variables list
         """
         version = await self._resolve_version(standard, version)
+        self._reject_adam_datasets_path(
+            standard, version, "get_dataset_variables", "get_datastructure_variables"
+        )
         cache_key = f"datasets/{standard}/{version}/{dataset}/variables"
         cached = self.cache.get(cache_key)
         if cached:
@@ -512,6 +707,47 @@ class CDISCClient:
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
+
+    def _reject_adam_datasets_path(
+        self,
+        standard: str,
+        version: str,
+        tool_name: str,
+        replacement: str,
+    ) -> None:
+        """Fail an ADaM datasets-path call locally, naming the tool that works.
+
+        The Library API has no ``/datasets`` segment under ``/mdr/adam/``, so the
+        alternative is a guaranteed 404 that reads like a typo in the dataset
+        name. Say what is actually wrong and which tool to call instead. Only the
+        dataset tools use this; the data structure tools are the supported route.
+
+        Args:
+            standard: Standard name (must be an ADaM family member)
+            version: Already-resolved concrete version
+            tool_name: Name of the tool the caller invoked
+            replacement: Name of the tool the caller should use instead
+
+        Raises:
+            ResourceNotFoundError: always, for ADaM standards
+        """
+        if standard not in ADAM_STANDARDS:
+            return
+        dead_url = self._build_standard_url(standard, version, "datasets")
+        raise ResourceNotFoundError(
+            message=(
+                f"🧭 {tool_name} 不适用于 '{standard}'：CDISC Library 的 ADaM 产品没有 "
+                f"datasets 端点（{dead_url} 必然 404），元数据全部挂在 datastructures 下："
+                f"{self._build_standard_url(standard, version, 'datastructures')}. "
+                f"请改用 {replacement}，例如 "
+                f"{replacement}(standard='{standard}', version='{version}', "
+                "datastructure='ADSL')；先用 get_datastructures 看有哪些数据结构"
+            ),
+            resource_type="endpoint",
+            resource_id="datasets",
+            standard=standard,
+            version=version,
+        )
 
     async def get_variable(
         self,
@@ -532,6 +768,9 @@ class CDISCClient:
             Dict with variable details
         """
         version = await self._resolve_version(standard, version)
+        self._reject_adam_datasets_path(
+            standard, version, "get_variable", "get_datastructure_variable"
+        )
         cache_key = f"datasets/{standard}/{version}/{dataset}/variables/{variable}"
         cached = self.cache.get(cache_key)
         if cached:
@@ -541,6 +780,341 @@ class CDISCClient:
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
+
+    # ====================
+    # ADaM Data Structure Endpoints
+    # ====================
+    #
+    # Shape verified against the live API for ADaMIG v1.3:
+    #   /datastructures                 -> _links.dataStructures (href + title)
+    #   /datastructures/ADSL            -> analysisVariableSets[] with analysisVariables[]
+    #   /datastructures/ADSL/variables  -> _links.analysisVariables (href + title only)
+    #   /datastructures/ADSL/varsets    -> _links.analysisVariableSets
+    #   /datastructures/ADSL/varsets/{vs} -> analysisVariables[] with description
+    #   /datastructures/ADSL/variables/{v} -> single variable detail
+
+    def _build_datastructure_url(
+        self, standard: str, version: str, *extra_parts: str
+    ) -> str:
+        """Build a ``.../datastructures/...`` URL for an ADaM-family product."""
+        return self._build_standard_url(
+            standard, version, "datastructures", *extra_parts
+        )
+
+    async def _fetch_json(self, cache_key: str, url: str) -> dict[str, Any]:
+        """Read one URL through the persistent cache."""
+        cached = self.cache.get(cache_key)
+        if cached:
+            return cached
+        result = await self._request_with_retry("GET", url)
+        self.cache.set(cache_key, result)
+        return result
+
+    async def _datastructure_request(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        *parts: str
+    ) -> dict[str, Any]:
+        """Fetch ``.../datastructures/<resolved name>/<parts>`` for all tools.
+
+        The only place the data structure name is turned into a URL, so the five
+        child tools cannot drift on cache-key or path construction.
+
+        Args:
+            standard: ADaM family standard
+            version: Version or "latest"
+            datastructure: Caller-supplied structure name (resolved here)
+            *parts: Additional path segments under the structure
+                (``"variables"``, ``("varsets", "Identifier")``, ...)
+
+        Returns:
+            Raw API payload
+        """
+        name, version, discoverable = await self._resolve_datastructure_name(
+            standard, version, datastructure
+        )
+        cache_key = "/".join(
+            ["datastructures", standard, version, name, *(str(p) for p in parts)]
+        )
+        try:
+            return await self._fetch_json(
+                cache_key, self._build_datastructure_url(standard, version, name, *parts)
+            )
+        except ResourceNotFoundError as error:
+            if discoverable:
+                raise
+            # Nothing was listed to match against, so the name was a guess; say so
+            # instead of leaving a bare URL 404 that reads like a typo.
+            inner = str(error.message)
+            if inner.startswith("📄"):
+                inner = inner[1:].lstrip()
+            raise ResourceNotFoundError(
+                message=(
+                    f"🧭 {inner}。注意：{standard} {version} 的 datastructures "
+                    "端点没有列出任何数据结构（ADaM 根模型 v2.1 就是如此），所以名称"
+                    "无从校验。要变量定义请改查 IG："
+                    "get_datastructure(standard='adamig', version='latest', datastructure='ADSL')"
+                ),
+                resource_type="datastructure",
+                resource_id=str(datastructure),
+                standard=standard,
+                version=version,
+            )
+
+    async def get_datastructures(
+        self,
+        standard: str,
+        version: str,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """List the analysis data structures of an ADaM product.
+
+        Args:
+            standard: ADaM family standard ('adam' or 'adamig')
+            version: Version or "latest"
+            raw: Return the untouched API payload
+
+        Returns:
+            Flattened list of data structures (exact href tail + label), or the
+            raw payload
+        """
+        version = await self._resolve_version(standard, version)
+        payload = await self._fetch_json(
+            f"datastructures/{standard}/{version}",
+            self._build_datastructure_url(standard, version),
+        )
+        if raw:
+            return payload
+        return flatten_link_list(
+            payload, "dataStructures", name_field="datastructures",
+            extra_fields=("type",),
+        )
+
+    async def _resolve_datastructure_name(
+        self, standard: str, version: str, datastructure: str
+    ) -> tuple[str, str, bool]:
+        """Resolve a data structure name to its exact href tail.
+
+        Matching is case- and punctuation-insensitive, so ``'adsl'`` finds
+        ``'ADSL'``. When the product lists no data structures over ``_links``
+        (ADaM v2.1 does not) the value is passed through unchanged rather than
+        rejected, because there is nothing to match against.
+
+        Returns:
+            Tuple of (exact data structure name, resolved version, discoverable),
+            where ``discoverable`` is False when the product listed no data
+            structures and so the returned name was taken on faith
+
+        Raises:
+            ResourceNotFoundError: If the product lists data structures but none
+                matches; the message names what is available
+        """
+        version = await self._resolve_version(standard, version)
+        listing = await self.get_datastructures(standard, version)
+        records = listing.get("datastructures") or []
+        index = _index_records(records)
+        if not index:
+            return str(datastructure).strip(), version, False
+        hit = index.get(_norm(datastructure))
+        if hit:
+            return hit, version, True
+        names = [r["name"] for r in records if r.get("name")]
+        close = difflib.get_close_matches(
+            str(datastructure), names, n=5, cutoff=0.4
+        )
+        hint = f"；相近的有: {', '.join(close)}" if close else ""
+        raise ResourceNotFoundError(
+            message=(
+                f"🔎 {standard} {version} 没有名为 '{datastructure}' 的数据结构"
+                f"（共 {len(names)} 个: {', '.join(names)}）{hint}。"
+                "ADaM 的数据结构名区分项目，如 ADSL / BDS / OCCDS"
+            ),
+            resource_type="datastructure",
+            resource_id=str(datastructure),
+            standard=standard,
+            version=version,
+        )
+
+    async def get_datastructure(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """Get one data structure with its variable sets and variables.
+
+        This is the only endpoint exposing ``core`` and ``simpleDatatype`` for the
+        whole structure, so it doubles as the "full variable list" answer. By
+        default it is flattened to one compact row per variable (descriptions
+        dropped); pass ``raw=True`` for the complete payload.
+        """
+        payload = await self._datastructure_request(
+            standard, version, datastructure
+        )
+        if raw:
+            return payload
+        return flatten_datastructure_variables(payload)
+
+    async def get_datastructure_variables(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """List variable names of a data structure (name + label).
+
+        Cheapest way to enumerate a structure: the API returns link entries only, so
+        ``core``/datatype/description are not here — use ``get_datastructure`` for
+        the table, ``get_datastructure_varset`` for one set with descriptions, and
+        ``get_datastructure_variable`` for a single variable.
+        """
+        payload = await self._datastructure_request(
+            standard, version, datastructure, "variables"
+        )
+        if raw:
+            return payload
+        return flatten_link_list(
+            payload, "analysisVariables", name_field="variables",
+        )
+
+    async def _resolve_variable_name(
+        self, standard: str, version: str, datastructure: str, variable: str
+    ) -> str:
+        """Resolve a variable to its exact href tail (``SITEGRy`` not ``SITEGRY``).
+
+        ADaM pattern variables mix cases deliberately (``SITEGRy``, ``APHASEw``,
+        ``TRxxPGy``), and the API path is case-sensitive, so the name is looked up
+        in the structure's variable list instead of being upper-cased.
+        """
+        listing = await self.get_datastructure_variables(
+            standard, version, datastructure
+        )
+        records = listing.get("variables") or []
+        index = _index_records(records)
+        if not index:
+            return str(variable).strip()
+        hit = index.get(_norm(variable))
+        if hit:
+            return hit
+        names = [r["name"] for r in records if r.get("name")]
+        close = difflib.get_close_matches(str(variable), names, n=5, cutoff=0.4)
+        hint = f"；相近的变量有: {', '.join(close)}" if close else ""
+        raise ResourceNotFoundError(
+            message=(
+                f"🔎 {datastructure} 里没有变量 '{variable}'{hint}。"
+                f"完整清单见 get_datastructure_variables("
+                f"standard='{standard}', datastructure='{datastructure}')"
+            ),
+            resource_type="analysis-variable",
+            resource_id=str(variable),
+            standard=standard,
+            version=version,
+        )
+
+    async def get_datastructure_variable(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        variable: str
+    ) -> dict[str, Any]:
+        """Get one variable of a data structure (core, datatype, description)."""
+        name, version, _ = await self._resolve_datastructure_name(
+            standard, version, datastructure
+        )
+        exact = await self._resolve_variable_name(
+            standard, version, name, variable
+        )
+        return await self._datastructure_request(
+            standard, version, name, "variables", exact
+        )
+
+    async def get_datastructure_varsets(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """List the variable sets of a data structure."""
+        payload = await self._datastructure_request(
+            standard, version, datastructure, "varsets"
+        )
+        if raw:
+            return payload
+        return flatten_link_list(
+            payload, "analysisVariableSets", name_field="variableSets",
+            extra_fields=("type",),
+        )
+
+    async def _resolve_varset(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        varset: str,
+    ) -> str:
+        """Resolve a variable set to its exact href tail.
+
+        Set labels are not stable across versions (v1.1 ``ADSL Identifier
+        Variables`` vs v1.3 ``ADSL Identifier``, slug ``Identifier``), so both the
+        slug and the label are accepted, with or without the leading structure
+        name.
+        """
+        listing = await self.get_datastructure_varsets(
+            standard, version, datastructure
+        )
+        records = listing.get("variableSets") or []
+        index = _index_records(records, strip_prefix=datastructure)
+        if not index:
+            return str(varset).strip()
+        hit = index.get(_norm(varset))
+        if hit:
+            return hit
+        names = [f"{r.get('name')} ({r.get('label')})" for r in records]
+        close = difflib.get_close_matches(
+            str(varset), [r["name"] for r in records if r.get("name")],
+            n=5, cutoff=0.4,
+        )
+        hint = f"；相近的有: {', '.join(close)}" if close else ""
+        raise ResourceNotFoundError(
+            message=(
+                f"🔎 {datastructure} 里没有变量集 '{varset}'"
+                f"（可用: {', '.join(names)}）{hint}"
+            ),
+            resource_type="variable-set",
+            resource_id=str(varset),
+            standard=standard,
+            version=version,
+        )
+
+    async def get_datastructure_varset(
+        self,
+        standard: str,
+        version: str,
+        datastructure: str,
+        varset: str,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """Get one variable set with its variables, descriptions included.
+
+        Small enough to return in full, so this is the drill-down for "what does
+        this variable mean" without pulling the whole structure.
+        """
+        name, version, _ = await self._resolve_datastructure_name(
+            standard, version, datastructure
+        )
+        exact = await self._resolve_varset(standard, version, name, varset)
+        payload = await self._datastructure_request(
+            standard, version, name, "varsets", exact
+        )
+        if raw:
+            return payload
+        return flatten_datastructure_variables(payload)
 
     # ====================
     # Controlled Terminology Endpoints

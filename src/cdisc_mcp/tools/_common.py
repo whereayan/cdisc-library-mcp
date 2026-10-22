@@ -16,6 +16,9 @@ from mcp.types import Tool, ToolAnnotations
 # silently typo one.
 STANDARDS = ["sdtm", "sdtmig", "sendig", "adam", "adamig", "cdash", "cdashig"]
 
+# Standards whose metadata lives under /datastructures instead of /datasets.
+ADAM_STANDARDS = ["adam", "adamig"]
+
 # Every tool in this server is a read-only GET against the Library API.
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
 
@@ -48,6 +51,37 @@ def raw_prop() -> dict[str, Any]:
     }
 
 
+def datastructure_prop() -> dict[str, Any]:
+    return {
+        "type": "string",
+        "description": (
+            "分析数据结构名，如 ADSL(受试者级分析数据集), BDS, OCCDS, TTE。"
+            "大小写不敏感；不确定时先调 get_datastructures 看可用清单"
+        ),
+    }
+
+
+def varset_prop() -> dict[str, Any]:
+    return {
+        "type": "string",
+        "description": (
+            "变量集，可传 slug（如 Identifier, Treatment, PopulationIndicator）"
+            "或显示名（如 'Subject Demographics'）；名称跨版本不稳定，"
+            "先用 get_datastructure_varsets 取当版可用清单"
+        ),
+    }
+
+
+def variable_prop(example: str = "AGE") -> dict[str, Any]:
+    return {
+        "type": "string",
+        "description": (
+            f"变量名称，如 {example}。大小写不敏感（ADSL 里存在 SITEGRy / APHASEw "
+            "这类混合大小写的模式变量，会自动匹配到 API 的准确写法）"
+        ),
+    }
+
+
 def tool(
     name: str,
     description: str,
@@ -68,4 +102,15 @@ def tool(
     )
 
 
-__all__ = ["STANDARDS", "READ_ONLY", "standard_prop", "version_prop", "raw_prop", "tool"]
+__all__ = [
+    "STANDARDS",
+    "ADAM_STANDARDS",
+    "READ_ONLY",
+    "standard_prop",
+    "version_prop",
+    "raw_prop",
+    "datastructure_prop",
+    "varset_prop",
+    "variable_prop",
+    "tool",
+]
