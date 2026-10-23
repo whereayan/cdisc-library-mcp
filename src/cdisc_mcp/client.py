@@ -17,6 +17,7 @@ from cdisc_mcp.utils.errors import (
     ResourceNotFoundError,
     NetworkError,
     RateLimitError,
+    ValidationError,
     CDISCError,
     format_http_error,
 )
@@ -28,6 +29,13 @@ from cdisc_mcp.utils.errors import (
 # 29 MB download three times helps nobody.
 _DIFF_TIMEOUT = 45.0
 
+# A CT package payload is the other oversized download (13 MB for
+# sdtmct-2024-03-29, measured 22.7 s cold). Fetch it once with a capped budget:
+# three retries of a 13 MB body would blow the 60 s timeout most MCP clients
+# enforce, and a failure only degrades submission-value lookups to per-term
+# detail requests rather than losing the data.
+_CT_PACKAGE_TIMEOUT = 45.0
+
 # Sentinel version alias resolved against the product list.
 _LATEST = "latest"
 
@@ -37,6 +45,151 @@ _LATEST = "latest"
 # and `.../ADSL/variables/AGE` resolve (verified against the live API). Routing
 # an ADaM dataset query at the datasets path therefore cannot ever succeed.
 ADAM_STANDARDS = ("adam", "adamig")
+
+# A CT package payload inlines the *whole* package: every codelist plus every
+# term, and each term carries its submissionValue. Measured on
+# sdtmct-2024-03-29: 1106 codelists, 13.36 MB of JSON. That single payload is
+# the bulk source for submission values -- the codelist `terms` endpoint only
+# links to them. Handing 13 MB over stdio is what made get_ct_package exceed the
+# 60 s request timeout of every MCP client, so it is summarised by default and
+# callers slice it with offset/limit.
+_CT_PAGE_DEFAULT_LIMIT = 200
+_CT_PAGE_MAX_LIMIT = 2000
+
+# Concurrency for the fallback path, used only when a term is absent from the
+# cached package payload. The API throttles long before 30 in flight; 8 keeps a
+# page of 200 terms inside one client-side request window.
+_CT_FALLBACK_CONCURRENCY = 8
+
+# Per-term fields an agent may ask for in a submission-value table.
+CT_TERM_FIELDS = ("code", "name", "submissionValue", "definition", "synonyms")
+CT_TERM_FIELDS_DEFAULT = ("code", "name", "submissionValue")
+
+
+def resolve_ct_fields(fields: Any) -> tuple[str, ...]:
+    """Validate and canonically order the requested term fields.
+
+    Args:
+        fields: None (defaults), a list/tuple of names, or one comma/space
+            separated string (agents pass either)
+
+    Returns:
+        Requested fields in CT_TERM_FIELDS order, no duplicates
+
+    Raises:
+        ValidationError: On any unsupported name
+    """
+    if fields is None or fields == []:
+        return CT_TERM_FIELDS_DEFAULT
+    if isinstance(fields, str):
+        parts = [p for p in re.split(r"[,\s]+", fields) if p]
+    elif isinstance(fields, (list, tuple)):
+        parts = [str(p).strip() for p in fields if str(p).strip()]
+    else:
+        raise ValidationError(
+            message="🔤 fields 需要字符串数组（如 ['name','submissionValue']）",
+            field="fields",
+            value=str(fields),
+        )
+    unknown = [p for p in parts if p not in CT_TERM_FIELDS]
+    if unknown:
+        raise ValidationError(
+            message=(
+                f"🔤 fields 不支持 {', '.join(unknown)}；"
+                f"可选: {', '.join(CT_TERM_FIELDS)}"
+            ),
+            field="fields",
+            value=", ".join(unknown),
+            expected_format="|".join(CT_TERM_FIELDS),
+        )
+    if not parts:
+        return CT_TERM_FIELDS_DEFAULT
+    return tuple(f for f in CT_TERM_FIELDS if f in set(parts))
+
+
+def build_ct_term_row(
+    term: Optional[dict[str, Any]],
+    code: str,
+    title: str,
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    """Shape one API term object into a row of the requested fields.
+
+    A missing term object (nothing found in the package payload and no detail
+    response) still yields a row, with the link title as the name, so a page is
+    never shorter than the roster it was sliced from.
+    """
+    term = term if isinstance(term, dict) else {}
+    row: dict[str, Any] = {}
+    for field in fields:
+        if field == "code":
+            row["code"] = term.get("conceptId") or code
+        elif field == "name":
+            row["name"] = term.get("preferredTerm") or title
+        elif field == "synonyms":
+            row["synonyms"] = term.get("synonyms") or []
+        else:
+            row[field] = term.get(field)
+    return row
+
+
+def summarise_ct_package(
+    payload: dict[str, Any],
+    offset: int = 0,
+    limit: int = _CT_PAGE_DEFAULT_LIMIT,
+) -> dict[str, Any]:
+    """Turn a 13 MB CT package payload into a sliceable codelist index.
+
+    The inline ``terms`` arrays (all of the submission values) stay on the
+    server: each codelist is reported with its ``termCount`` only. Same totals,
+    ~0.1% of the bytes.
+    """
+    requested = limit or _CT_PAGE_DEFAULT_LIMIT
+    meta = {
+        key: payload[key]
+        for key in (
+            "name", "label", "version", "effectiveDate",
+            "registrationStatus", "source", "description",
+        )
+        if key in payload
+    }
+    rows = []
+    total_terms = 0
+    for cl in payload.get("codelists") or []:
+        if not isinstance(cl, dict):
+            continue
+        terms = cl.get("terms") or []
+        total_terms += len(terms)
+        rows.append(
+            {
+                "conceptId": cl.get("conceptId"),
+                "name": cl.get("name"),
+                "submissionValue": cl.get("submissionValue"),
+                "extensible": cl.get("extensible"),
+                "termCount": len(terms),
+            }
+        )
+    offset = max(int(offset or 0), 0)
+    limit = min(max(int(limit or _CT_PAGE_DEFAULT_LIMIT), 1), _CT_PAGE_MAX_LIMIT)
+    page = rows[offset: offset + limit]
+    meta.update(
+        {
+            "codelistCount": len(rows),
+            "termCount": total_terms,
+            "offset": offset,
+            "limit": limit,
+            "limitRequested": int(requested),
+            "returned": len(page),
+            "hasMore": offset + len(page) < len(rows),
+            "codelists": page,
+            "note": (
+                "整包 13 MB 的逐术语 submissionValue 不外发；按 conceptId 取某表的"
+                "全部提交值用 get_codelist_submission_values(package, codelist)。"
+                "要原始整包载荷用 raw=true（会非常大，慎用）。"
+            ),
+        }
+    )
+    return meta
 
 
 def _norm(text: Any) -> str:
@@ -801,12 +954,27 @@ class CDISCClient:
             standard, version, "datastructures", *extra_parts
         )
 
-    async def _fetch_json(self, cache_key: str, url: str) -> dict[str, Any]:
-        """Read one URL through the persistent cache."""
+    async def _fetch_json(
+        self,
+        cache_key: str,
+        url: str,
+        timeout: Optional[float] = None,
+        retries: Optional[int] = None
+    ) -> dict[str, Any]:
+        """Read one URL through the persistent cache.
+
+        Args:
+            cache_key: Persistent cache key
+            url: URL to fetch
+            timeout: Per-attempt timeout override for oversized payloads
+            retries: Retry override; 0 keeps the worst case inside one budget
+        """
         cached = self.cache.get(cache_key)
         if cached:
             return cached
-        result = await self._request_with_retry("GET", url)
+        result = await self._request_with_retry(
+            "GET", url, timeout=timeout, retries=retries
+        )
         self.cache.set(cache_key, result)
         return result
 
@@ -1136,25 +1304,65 @@ class CDISCClient:
         self.cache.set(cache_key, result)
         return result
 
-    async def get_ct_package(self, package: str) -> dict[str, Any]:
+    async def get_ct_package(
+        self,
+        package: str,
+        offset: int = 0,
+        limit: int = _CT_PAGE_DEFAULT_LIMIT,
+        raw: bool = False
+    ) -> dict[str, Any]:
         """Get controlled terminology package details.
 
         Args:
-            package: Package name (e.g., "p60", "P60")
+            package: Package name (e.g., "sdtmct-2024-03-29", "SDTMCT-2024-03-29")
+            offset: First codelist of the index page
+            limit: Codelists per page (capped at _CT_PAGE_MAX_LIMIT)
+            raw: Return the untouched API payload -- the entire package with
+                every term inline (13 MB+ for SDTM CT); the 200 codelists here
+                are only a page of the index
 
         Returns:
-            Dict with package details
+            Package metadata plus a page of the codelist index, or the raw payload
         """
         package = self._normalize_package(package)
-        cache_key = f"ct/packages/{package}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
+        payload = await self._fetch_json(
+            f"ct/packages/{package}",
+            self._build_url("ct", "packages", package),
+            timeout=_CT_PACKAGE_TIMEOUT,
+            retries=0,
+        )
+        if raw:
+            return payload
+        return summarise_ct_package(payload, offset=offset, limit=limit)
 
-        url = self._build_url("ct", "packages", package)
-        result = await self._request_with_retry("GET", url)
-        self.cache.set(cache_key, result)
-        return result
+    async def _ct_package_codelist(
+        self, package: str, codelist: str
+    ) -> Optional[dict[str, Any]]:
+        """Find one codelist, terms inline, inside the cached package payload.
+
+        Args:
+            package: Normalized package name
+            codelist: Codelist ID (compared case-insensitively)
+
+        Returns:
+            The codelist object, or None when the package does not carry it
+            (unknown package shape, endpoint outage, or a codelist the package
+            payload omits). Never raises: callers fall back to per-term detail.
+        """
+        try:
+            payload = await self._fetch_json(
+                f"ct/packages/{package}",
+                self._build_url("ct", "packages", package),
+                timeout=_CT_PACKAGE_TIMEOUT,
+                retries=0,
+            )
+        except CDISCError:
+            return None
+        needle = str(codelist).strip().upper()
+        for cl in payload.get("codelists") or []:
+            if isinstance(cl, dict) and str(cl.get("conceptId", "")).upper() == needle:
+                return cl
+        return None
 
     async def get_codelists(self, package: str) -> dict[str, Any]:
         """Get codelists for a CT package.
@@ -1185,7 +1393,7 @@ class CDISCClient:
 
         Args:
             package: Package name
-            codelist: Codelist ID (e.g., "C667")
+            codelist: Codelist ID (e.g., "C66731" for SEX)
 
         Returns:
             Dict with codelist details
@@ -1310,6 +1518,138 @@ class CDISCClient:
         result = await self._request_with_retry("GET", url)
         self.cache.set(cache_key, result)
         return result
+
+    async def get_codelist_submission_values(
+        self,
+        package: str,
+        codelist: str,
+        fields: Any = None,
+        offset: int = 0,
+        limit: int = _CT_PAGE_DEFAULT_LIMIT,
+        raw: bool = False
+    ) -> dict[str, Any]:
+        """List a codelist's terms with their submission values.
+
+        Why this exists: the codelist ``terms`` endpoint -- the only bulk listing
+        the API offers -- returns hypermedia links (``href`` + ``title``) and no
+        per-term ``submissionValue``, and ``raw=true`` does not change that. The
+        values live in two places: the package payload (all of them, inline) and
+        each term's own detail resource. This method reads the package payload,
+        so a 260-term codelist costs **one** HTTP request instead of 260, and
+        falls back to detail requests only for terms the package payload lacks.
+
+        Enumeration itself always comes from the codelist's ``terms`` endpoint:
+        that is the authoritative roster for this package version, and the
+        ``raw=false`` response keys ``refs`` are term *names*, so a codelist with
+        duplicate names would silently rename them to ``Name-2``. Reading links
+        keeps one row per term and preserves the API's order.
+
+        Args:
+            package: Package name (case-insensitive)
+            codelist: Codelist ID (e.g. "C65047" for LBTESTCD, "C66731" for SEX)
+            fields: Subset of CT_TERM_FIELDS to return (default code, name,
+                submissionValue); accepts a list or a comma-separated string
+            offset: First term of the page (roster order)
+            limit: Terms per page (capped at _CT_PAGE_MAX_LIMIT, i.e. 2000 --
+                a codelist larger than that needs a second page; LBTESTCD's
+                2397 terms arrive as 2000 + 397)
+            raw: Return every field the API gives for each term, ignoring
+                ``fields`` and the summary envelope
+
+        Returns:
+            Envelope with codelist identity, pagination totals, ``valueSource``
+            and a page of rows. ``total`` is the full roster size, so a caller
+            can tell a page from the whole table.
+
+        Raises:
+            ValidationError: On unsupported ``fields``
+            ResourceNotFoundError: When the package or codelist does not exist
+        """
+        package = self._normalize_package(package)
+        codelist = str(codelist).strip().upper()
+        # raw returns whatever the API gives per term; there is nothing to select
+        chosen = CT_TERM_FIELDS if raw else resolve_ct_fields(fields)
+        requested_limit = limit
+        offset = max(int(offset or 0), 0)
+        limit = min(
+            max(int(limit or _CT_PAGE_DEFAULT_LIMIT), 1), _CT_PAGE_MAX_LIMIT
+        )
+
+        roster_payload = await self.get_codelist_terms(package, codelist)
+        links = roster_payload.get("_links") or {}
+        roster = [
+            (
+                str(item["href"]).rstrip("/").split("/")[-1],
+                str(item.get("title", "")),
+            )
+            for item in (links.get("terms") or [])
+            if isinstance(item, dict) and item.get("href")
+        ]
+        page = roster[offset: offset + limit]
+
+        inline_cl = await self._ct_package_codelist(package, codelist)
+        by_code = {
+            str(term.get("conceptId", "")).upper(): term
+            for term in ((inline_cl or {}).get("terms") or [])
+            if isinstance(term, dict)
+        }
+        # A term the package payload does not carry (or no payload at all) is
+        # resolved by its own detail request; bounded to this page.
+        missing = [code for code, _ in page if code.upper() not in by_code]
+        if missing:
+            semaphore = asyncio.Semaphore(_CT_FALLBACK_CONCURRENCY)
+
+            async def fetch(code: str) -> tuple[str, Optional[dict[str, Any]]]:
+                async with semaphore:
+                    try:
+                        return code, await self.get_term(package, codelist, code)
+                    except CDISCError:
+                        return code, None
+
+            for code, term in await asyncio.gather(
+                *(fetch(code) for code in missing)
+            ):
+                if term is not None:
+                    by_code[code.upper()] = term
+
+        if raw:
+            terms = [
+                {**(by_code.get(code.upper()) or {}), "code": code}
+                for code, _ in page
+            ]
+        else:
+            terms = [
+                build_ct_term_row(by_code.get(code.upper()), code, title, chosen)
+                for code, title in page
+            ]
+
+        if inline_cl is None:
+            value_source = "term-detail"
+        elif not missing:
+            value_source = "package"
+        else:
+            value_source = "package+term-detail"
+
+        return {
+            "package": package,
+            "codelist": codelist,
+            "codelistName": (
+                roster_payload.get("name")
+                or (inline_cl or {}).get("name")
+            ),
+            "codelistSubmissionValue": roster_payload.get("submissionValue"),
+            "extensible": roster_payload.get("extensible"),
+            "fields": list(chosen),
+            "total": len(roster),
+            "offset": offset,
+            "limit": limit,
+            "limitRequested": requested_limit,
+            "returned": len(terms),
+            "hasMore": offset + len(terms) < len(roster),
+            "valueSource": value_source,
+            "termsResolvedByDetailRequest": len(missing),
+            "terms": terms,
+        }
 
     # ====================
     # Search Endpoints

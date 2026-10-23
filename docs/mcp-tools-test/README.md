@@ -6,7 +6,7 @@
 
 ## 测试时间
 
-2026-04-08
+2026-04-08（2026-10-23 复核 CT 工具组：`get_ct_package` / `get_codelist_terms` 两篇示例载荷系复制粘贴错误，已按实测重写；新增 `get_codelist_submission_values`）
 
 ## 工具列表
 
@@ -33,6 +33,7 @@
 | 19 | get_datastructure_variable | 获取数据结构单变量详情 | ✅ 通过 | [get_datastructure_variable.md](get_datastructure_variable.md) |
 | 20 | get_datastructure_varsets | 获取数据结构变量集清单 | ✅ 通过 | [get_datastructure_varsets.md](get_datastructure_varsets.md) |
 | 21 | get_datastructure_varset | 获取单个变量集详情 | ✅ 通过 | [get_datastructure_varset.md](get_datastructure_varset.md) |
+| 22 | get_codelist_submission_values | 批量获取术语提交值（0.1.10+） | ✅ 通过 | [get_codelist_submission_values.md](get_codelist_submission_values.md) |
 
 ## 测试参数汇总
 

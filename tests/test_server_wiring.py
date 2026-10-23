@@ -63,7 +63,7 @@ class TestRegistration:
     async def test_all_twenty_one_tools_reachable(self, server):
         await server.setup()
         res = await _request(server, types.ListToolsRequest(method="tools/list"))
-        assert len(res.tools) == 21, sorted(t.name for t in res.tools)
+        assert len(res.tools) == 22, sorted(t.name for t in res.tools)
 
     async def test_prompts_listed(self, server):
         await server.setup()

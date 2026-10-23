@@ -104,7 +104,14 @@ async def _execute_tool(
     elif name == "get_ct_packages":
         return await client.get_ct_packages()
     elif name == "get_ct_package":
-        return await client.get_ct_package(args["package"])
+        # Shaped inside the client: the whole-package payload is 13 MB and must
+        # not reach stdio unless raw=true was asked for.
+        return await client.get_ct_package(
+            args["package"],
+            offset=args.get("offset") or 0,
+            limit=args.get("limit") or 200,
+            raw=raw,
+        )
     elif name == "get_codelists":
         return await client.get_codelists(args["package"])
     elif name == "get_codelist":
@@ -113,6 +120,17 @@ async def _execute_tool(
         return await client.get_codelist_terms(args["package"], args["codelist"])
     elif name == "get_term":
         return await client.get_term(args["package"], args["codelist"], args["term"])
+    elif name == "get_codelist_submission_values":
+        # Envelope is already compact (fixed columns + pagination); the generic
+        # link-slimming is a no-op over it, and raw must not re-inflate it.
+        return await client.get_codelist_submission_values(
+            args["package"],
+            args["codelist"],
+            fields=args.get("fields"),
+            offset=args.get("offset") or 0,
+            limit=args.get("limit") or 200,
+            raw=raw,
+        )
 
     # Search tools
     elif name == "search":

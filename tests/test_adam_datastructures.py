@@ -487,7 +487,7 @@ class TestToolWiring:
             "get_datastructure_varset",
         }
         assert expected <= set(tools), sorted(set(tools) ^ expected)
-        assert len(tools) == len(ALL_TOOLS) == 21
+        assert len(tools) == len(ALL_TOOLS) == 22
         for name in expected:
             schema = tools[name].inputSchema
             assert "raw" in schema["properties"], name

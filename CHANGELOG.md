@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.1.10
+
+### Added
+
+- **`get_codelist_submission_values` — 批量取术语提交值（21 -> 22 个工具）**。
+  起因是一条对 Library API 的事实核查：codelist 的 `terms` 端点是唯一的批量术语
+  清单来源，而它**不返回逐术语 `submissionValue`** —— `_links.terms[]` 只有
+  `href`/`title`/`type`，`raw=true` 也不会多给一个字段（实测 LBTESTCD：瘦身
+  265,689 字符、raw 457,921 字符，两处都没有提交值）。更糟的是该端点**顶部的**
+  `submissionValue` 是 codelist 自己的变量名（`LBTESTCD`、`SEX`），与术语提交值
+  同名字段，看上去就像批量接口已经给了值。
+  当时能取到提交值的地方只有单术语详情，于是「拿全 260 个提交值」被认定必须
+  260 次调用（实测 ~566ms/次 ≈ 150s，且第二批 30 条比第一批慢 2.4 倍 —— 服务端
+  限流）或改下官方 Excel。**两种都不必**：包级载荷 `ct/packages/{package}` 内联了
+  整包 1106 张表 / 40,126 个术语，每个术语都带 `submissionValue`，一次请求即全覆盖。
+  本工具即把这条路径做成工具：读包载荷取提交值，读 codelist `terms` 端点取权威
+  名单，只有包载荷缺失的条目才回退到单术语详情（并发 8，上限=本页条数），并在
+  `valueSource` / `termsResolvedByDetailRequest` 里如实告知走了哪条路。
+  实测（2026-10-23）：LBTESTCD 2397 术语冷启动 26.1s / 2 次 HTTP、命中包缓存 1.6s /
+  1 次 HTTP，`submissionValue` 覆盖 2397/2397；`get_term` 单条链路保持不变。
+  另加 `fields`（默认 `code,name,submissionValue`，可选 `definition`/`synonyms`，
+  数组与逗号串两种写法都收、大小写敏感于拼写但会拒绝未知列并列出合法值）、`offset`/`limit`
+  （默认 200，上限 2000）、`raw`；名单来自 `_links` 而非瘦身后的名字键，因此**同名
+  术语各占一行**、顺序与 API 一致，`total` 是全量条数便于判断要不要继续翻页。
+
+### Fixed
+
+- **`get_ct_package` 不再原样推 13 MB 载荷（此前必然超时）**。该端点返回整包内联
+  数据，实测 `sdtmct-2024-03-29` 为 **13,359,789 字符**，而响应瘦身只减到
+  13,359,578（只剥链接壳，1106 张表的术语全都留着），任何 MCP 客户端的 60s
+  请求预算都吃不下 —— 0.1.9 起该工具在实调中 100% 超时（`raw=false` 与 `raw=true`
+  皆然），等于「包详情」这一级元数据完全不可用。现在默认返回**包元信息 + 分页
+  codelist 索引**（含每张表的 `termCount`），实测 36,110 字符 / 缩小 370 倍、
+  命中缓存 0.12s，`raw=true` 仍是原始整包逃生舱。数据一个没少：提交值仍从缓存的
+  包载荷里读，只是不再从 stdio 硬推。
+- **包级大载荷按单次封顶超时拉取**：13 MB 用默认 `timeout=30s` + `retries=3` 时，
+  最坏 4 × 30s 加退避远超客户端预算（与 0.1.x 给 `compare_versions` 定
+  `_DIFF_TIMEOUT=45` 的原因同类）。现包载荷走 `timeout=45s, retries=0`，最坏情况
+  仍在 60s 内；失败不报错给调用方，而是让 `get_codelist_submission_values` 降级为
+  逐术语详情（数据不丢，只是变慢，`valueSource` 显示 `term-detail`）。
+- **工具描述里的假 Codelist ID 全部纠正**：`_CODELIST_PROP` 与三个 CT 工具的
+  `description` 示例一直写 `C667(SEX)` / `codelist='C667'`，而 **C667 不存在**
+  （SEX 实为 `C66731`，4 个术语），照抄文档的调用一律 404，且 404 文案只给 URL、
+  不提示 ID 本身是错的。现已改为 `C66731`，并在参数说明里点名「ID 不能靠直觉拼」。
+  由 `test_no_bogus_c667_sex_hint_left_in_docs` 守住不再回潮。
+
+### Changed
+
+- `get_codelist_terms` 的 `description` 现在写明自己的边界：不返回逐术语提交值、
+  `raw=true` 也不返回、顶部 `submissionValue` 属于 codelist，并指向新工具与大表的
+  字符数量级；`get_codelist` / `get_ct_package` 描述同步说明分工。
+
+### Docs
+
+- 纠正两篇工具测试文档里的**复制粘贴错误载荷**：`get_ct_package.md` 与
+  `get_codelist_terms.md` 的「返回结果示例」贴的都是同一个单术语详情
+  （`conceptId: C174106` + `submissionValue`），与那两个工具的真实返回无关 ——
+  这正是「以为批量接口带提交值」误解的来源。现按实测重写：前者给出摘要形状与
+  13 MB 的来龙去脉，后者用 A/B 两段对照说清 `terms` 端点与 `get_term` 各自返回什么，
+  并补上大表无分页参数的 token 警告。
+  新增 `get_codelist_submission_values.md`（含实测请求数/耗时/规模对照表）；
+  README 工具表与索引同步（22 个工具）。
+
+### Tests
+
+- 端到端（真起 stdio 服务、`list_tools` + `call_tool` 实调）抓出两个单测因绕过
+  schema 校验而看不到的问题，已一并修掉：**`fields` 声明成纯 array，于是文档里
+  推荐的逗号串写法在 MCP 入参校验阶段就被拒**（`'name,submissionValue' is not
+  type of 'array'`，请求根本到不了解析器），现 `anyOf: [array of enum, string]`
+  两种写法都通；**`limit` 超过 2000 被静默钳制而调用方无从察觉**（LBTESTCD 2397 条
+  请求 2400 只拿到 2000 条），响应新增 `limitRequested` 回显请求值，
+  `get_ct_package` 同步，两处都写进工具描述与文档（2397 条需翻两页）。
+- 新增 `tests/test_ct_submission_values.py` 31 条：`fields` 默认/数组/逗号串/规范化
+  排序/去重/拒未知列/拒非标量；行构造优先 API 值、缺载荷回退链接 title、`synonyms`
+  默认空表；包摘要不外发提交值、`termCount`、分页与上限钳制、指向替代工具；
+  **整表零逐条请求**（`calls == []`）、包载荷缺项时只补差集（1 条而非整页）、包载荷
+  不存在时全量降级、包下载抛错时降级仍保住提交值、翻页走完整名单、`fields` 选列、
+  `raw` 给全字段并上报全部可用列、**同名术语各占一行**、`limit`/`offset`/ID 大小写
+  与空白归一、坏 ID 仍抛 404、注册表 22 个工具与 schema、CT 描述不再含假 ID、
+  分发层不被通用瘦身改写。既有两套计数断言（`test_server_wiring`、`test_adam_datastructures`）21->22 同步。全量 162 -> **193 passed**（其余文件 162 条一条未动，仅两处工具计数从 21 改 22）。
+
 ## 0.1.9
 
 ### Added

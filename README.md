@@ -118,11 +118,19 @@ ADaM / ADaMIG 的元数据挂在 `/datastructures` 下，没有 `datasets` 端�
 | 工具 | 描述 |
 |------|------|
 | `get_ct_packages` | 获取 CT 包列表 |
-| `get_ct_package` | 获取 CT 包详情 |
+| `get_ct_package` | 获取 CT 包详情（分页 codelist 索引；整包 13 MB 不外发） |
 | `get_codelists` | 获取编码列表 |
 | `get_codelist` | 获取编码详情 |
-| `get_codelist_terms` | 获取术语列表 |
+| `get_codelist_terms` | 获取术语列表（术语名 + C 代码；**不含**逐术语提交值） |
+| `get_codelist_submission_values` | 分页获取术语名 + C 代码 + **提交值**（整表 1~2 次请求，0.1.10+） |
 | `get_term` | 获取术语详情（term 支持 C 代码或术语名） |
+
+> **CT 提交值（submissionValue）的取法**：Library API 的 codelist `terms` 端点是唯一的
+> 批量术语清单来源，但**不返回逐术语提交值**，`raw=true` 也不会多给一个字段；它顶部的
+> `submissionValue`（如 `LBTESTCD`）是 **codelist 自己的变量名**。提交值只存在于包级载荷
+> （整包内联）与单术语详情里。`get_codelist_submission_values` 读前者，因此拿一张表的全部
+> 提交值是 **1~2 次请求**，而不是逐条 N 次（LBTESTCD 2397 术语：冷启动 26.1s / 命中缓存 1.6s，
+> 对比逐条 260 次 ≈ 150s）。只要术语名与 C 代码时用 `get_codelist_terms` 更省。
 
 ### 搜索与比较
 | 工具 | 描述 |
